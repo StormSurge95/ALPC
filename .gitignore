@@ -15,6 +15,9 @@
 
 # Mono auto generated files
 mono_crash.*
+Test.py
+credentials.json
+G_*.json
 
 # Build results
 [Dd]ebug/
