@@ -3,6 +3,7 @@ import sys
 import typing
 from threading import Timer
 import asyncio
+import logging
 
 class Tools:
     @staticmethod
@@ -31,13 +32,17 @@ class Tools:
             return math.hypot(a['x'] - b['x'], a['y'] - b['y'])
 
     @staticmethod
-    def setTimeout(fn, ms, *args, **kwargs):
+    def setTimeout(fn, delay, *args, **kwargs):
         async def schedule():
-            await asyncio.sleep(ms / 1000)
+            await asyncio.sleep(delay)
 
             if asyncio.iscoroutinefunction(fn):
                 await fn(*args, **kwargs)
             else:
                 fn(*args, **kwargs)
-        asyncio.ensure_future(schedule())
-        
+        fut = asyncio.ensure_future(schedule())
+        return fut
+
+    @staticmethod
+    def clearTimeout(fut):
+        fut.cancel()

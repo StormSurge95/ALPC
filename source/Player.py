@@ -1,7 +1,15 @@
 from Tools import Tools
 from Entity import Entity
-from Character import Character
+import logging
+import logging.config
 import typing
+import sys
+
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
+logger.addHandler(handler)
 
 class Player:
     def __init__(self, data, map, instance, g):
@@ -20,7 +28,7 @@ class Player:
         for key in data.keys():
             setattr(self, key, data[key])
 
-    def calculateDamageRange(self, defender: Character | Entity | Player, skill: str = 'attack') -> list:
+    def calculateDamageRange(self, defender, skill: str = 'attack') -> list:
         if hasattr(defender, 'immune') and (skill in ['3shot', '5shot', 'burst', 'cburst', 'supershot', 'taunt']):
             return [0, 0]
 
@@ -66,7 +74,7 @@ class Player:
 
         return [lowerLimit, upperLimit]
 
-    def isFriendly(self, bot: Character) -> bool:
+    def isFriendly(self, bot) -> bool:
         if hasattr(self, 'npc'):
             return True
 

@@ -4,8 +4,17 @@ import ujson
 import typing
 import re
 import logging
+import logging.config
 import sys
+from Tools import Tools
 from Observer import Observer
+from Character import Character
+
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
+logger.addHandler(handler)
 
 class Game:
     loggedIn: bool = False
@@ -259,7 +268,42 @@ class Game:
 
     @staticmethod
     async def startCharacter(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):
-        pass
+        if not Game.loggedIn:
+            print('You must login first.')
+            raise Exception()
+        if not bool(getattr(Game, 'characters', False)):
+            await Game.updateServersAndCharacters(session)
+        if not bool(getattr(Game, 'G')):
+            await Game.getGData(session, True, True)
+        userInfo = str(session.cookie_jar.filter_cookies('https://adventure.land')['auth'].value)
+        userID = userInfo.split('-')[0]
+        userAuth = userInfo.split('-')[1]
+        if not Game.characters.get(cName):
+            print(f"You don't have a character with the name '{cName}'")
+            raise Exception()
+        characterID = Game.characters[cName]['id']
+
+        player = None
+        player = Character(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID])
+        await player.connect()
+        return player
+        #ctype = self.characters[cName].type
+        #if ctype == 'mage':
+        #    pass
+        #elif ctype == 'merchant':
+        #    pass
+        #elif ctype == 'paladin':
+        #    pass
+        #elif ctype == 'priest':
+        #    pass
+        #elif ctype == 'ranger':
+        #    pass
+        #elif ctype == 'rogue':
+        #    pass
+        #elif ctype == 'warrior':
+        #    pass
+        #else:
+        #    pass
 
     @staticmethod
     async def startMage(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):

@@ -1,5 +1,14 @@
 import typing
 from Tools import Tools
+import logging
+import logging.config
+import sys
+
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
+logger.addHandler(handler)
 
 class Entity:
     def __init__(self, data: dict, map: str, instance: str, G: dict):

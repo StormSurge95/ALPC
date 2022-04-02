@@ -7,7 +7,16 @@ from database.Database import Database
 from Tools import Tools
 from Constants import Constants
 import promisio
+import logging
+import logging.config
 import math
+import sys
+
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
+handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
+logger.addHandler(handler)
 
 class Observer:
     pingsPerServer: dict = {}
@@ -17,7 +26,7 @@ class Observer:
         self.serverData = serverData
         self.G = g
         self.lastAllEntities = 0
-        self.lastPositionUpdate = datetime.datetime.now()
+        self.lastPositionUpdate = None
         self.entities = {}
         self.pingIndex = 0
         self.pingMap = {}
@@ -71,7 +80,6 @@ class Observer:
 
             self.updatePositions()
 
-            #if not Database.connection or data.reason == 'disconnect' or data.reason == 'invis':
             return
         #TODO: add database functions
 
@@ -143,7 +151,7 @@ class Observer:
 
         @self.socket.event
         def ping_ack(data):
-            ping = self.pingMap.get(data.id, None)
+            ping = self.pingMap.get(data['id'], None)
             if ping:
                 time = datetime.datetime.now() - ping.time
                 self.pings[self.pingIndex] = time
@@ -158,20 +166,23 @@ class Observer:
 
         def welcomeFn(data):
             self.server = data
-        self.socket.on('welcome', handler=welcomeFn)
 
         if start:
-            def connectedFn(resolve, reject):
+            async def connectedFn():
+                connected = asyncio.get_event_loop().create_future()
+                @self.socket.event
                 async def welcome(data):
+                    print(data)
                     if (data['region'] != self.serverData['region']) or (data['name'] != self.serverData['name']):
-                        reject(f"We wanted the server {self.serverdata['region']}{self.serverData['name']}, but we are on {data['region']}{data['name']}.")
+                        connected.set_exception(Exception(f"We wanted the server {self.serverData['region']}{self.serverData['name']}, but we are on {data['region']}{data['name']}."))
                     else:
-                        await self.socket.emit('loaded', {'height':1080, 'scale':2,'success':1,'width':1920})
-                        resolve()
-                self.socket.on('welcome', handler=welcome)
-                Tools.setTimeout(reject, Constants.CONNECT_TIMEOUT_MS, f'Failed to start within {Constants.CONNECT_TIMEOUT_MS / 1000}s.')
-            connected = promisio.Promise(connectedFn(lambda : None, lambda x: x))
-            return await connected
+                        await self.socket.emit('loaded', {'height':1080, 'scale':2, 'success':1, 'width':1920})
+                        connected.set_result(True)
+                    welcomeFn(data)
+                while not connected.done():
+                    await asyncio.sleep(0.25)
+                return connected.result()
+            return await connectedFn()
 
     def deleteEntity(self, id: str, death: bool = False) -> bool:
         entity = self.entities.get(id, None)
@@ -224,7 +235,6 @@ class Observer:
         #TODO: database stuff
 
     def parseNewMap(self, data):
-        #print(str(data))
         self.projectiles.clear()
 
         self.x = data['x']
@@ -234,7 +244,7 @@ class Observer:
         self.parseEntities(data['entities'])
 
     def updatePositions(self):
-        if self.lastPositionUpdate:
+        if getattr(self, 'lastPositionUpdate'):
             msSinceLastUpdate = (datetime.datetime.now() - self.lastPositionUpdate).total_seconds() * 1000
             if msSinceLastUpdate == 0:
                 return
@@ -253,7 +263,6 @@ class Observer:
                 else:
                     entity.x = entity.x + math.cos(angle) * distanceTravelled
                     entity.y = entity.y + math.sin(angle) * distanceTravelled
-                #print(f'{entity.id}:', str(entity.s))
                 eKeys = list(entity.s)
                 for condition in eKeys:
                     newCooldown = entity.s[condition]['ms'] - msSinceLastUpdate
@@ -263,7 +272,6 @@ class Observer:
                         entity.s[condition]['ms'] = newCooldown
 
             for player in self.players.values():
-                #print(dir(player))
                 if not getattr(player, 'moving', False):
                     continue
 
@@ -277,7 +285,6 @@ class Observer:
                 else:
                     player.x = player.x + math.cos(angle) * distanceTravelled
                     player.y = player.y + math.sin(angle) * distanceTravelled
-                #print(f'{player.id}:', str(player.s))
                 pKeys = list(player.s)
                 for condition in pKeys:
                     newCooldown = player.s[condition]['ms'] - msSinceLastUpdate
@@ -303,7 +310,7 @@ class Observer:
             del self.players[id]
 
         for id in list(self.projectiles):
-            if (datetime.datetime.now() - self.projectiles[id]['date']).total_seconds() > Constants.STALE_PROJECTILE_MS / 1000:
+            if (datetime.datetime.now() - self.projectiles[id]['date']).total_seconds() > Constants.STALE_PROJECTILE_S:
                 del self.projectiles[id]
 
         self.lastPositionUpdate = datetime.datetime.now()
