@@ -10,7 +10,6 @@ import ujson
 import re
 import sys
 import math
-import promisio
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(sys.stdout)
@@ -328,3 +327,26 @@ class Character(Observer.Observer):
 
         for timer in self.timeouts.values():
             Tools.clearTimeout(timer)
+
+    async def requestEntitiesData(self):
+        if not self.ready:
+            raise Exception("We aren't ready yet [requestEntitiesData]")
+
+        async def entitiesDataFn():
+            entitiesData = asyncio.get_event_loop().create_future()
+            async def checkEntitiesEvent(data):
+                if data['type'] == 'all':
+                    entitiesData.set_result(data)
+
+            def reject(reason):
+                if not entitiesData.done():
+                    entitiesData.set_exception(Exception(reason))
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'requestEntitiesData timeout ({Constants.TIMEOUT}s)')
+            self.socket.on('entities', checkEntitiesEvent)
+
+            await self.socket.emit('send_updates', {})
+            while not entitiesData.done():
+                await asyncio.sleep(0.25)
+            return entitiesData.result()
+
+        return await entitiesDataFn()

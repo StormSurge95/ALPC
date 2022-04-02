@@ -1,12 +1,10 @@
 from Game import Game
-from database.Database import Database
+#from database.Database import Database
 from Tools import Tools
 import asyncio
 import aiohttp
-import pymongo
 import ujson
 import logging
-import logging.config
 import sys
 
 logger = logging.getLogger(__name__)
@@ -22,9 +20,9 @@ async def main():
         logger.info('starting Observer')
         #await Game.startObserver(session, 'US', 'III')
         char = await Game.startCharacter(session, 'StormSurge', 'US', 'III')
-        await asyncio.sleep(10)
+        await char.requestEntitiesData()
+        await asyncio.sleep(60)
         await char.disconnect()
-        await session.close()
     print('Test Complete')
 
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())

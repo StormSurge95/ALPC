@@ -6,7 +6,6 @@ from Player import Player
 from database.Database import Database
 from Tools import Tools
 from Constants import Constants
-import promisio
 import logging
 import logging.config
 import math
