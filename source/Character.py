@@ -31,6 +31,7 @@ class Character(Observer.Observer):
         self.achievements = {}
         self.timeouts = {}
         Observer.Observer.__init__(self, serverData, g)
+        return self
 
     @asyncio.coroutine
     async def updateLoopFn(self):
@@ -58,6 +59,7 @@ class Character(Observer.Observer):
         else:
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoopFn, Constants.UPDATE_POSITIONS_EVERY_S - msSinceLastUpdate)
             return
+        return
 
     def parseCharacter(self, data):
         self.updatePositions()
@@ -104,6 +106,7 @@ class Character(Observer.Observer):
                 break
 
         super().parseEntities(data)
+        return
 
     def parseEval(self, data):
         skillReg = re.search("^skill_timeout\s*\(\s*['\"](.+?)['\"]\s*,?\s*(\d+\.?\d+?)?\s*\)", data['code'])
@@ -166,17 +169,20 @@ class Character(Observer.Observer):
         setattr(self, 'moving', False)
 
         super().parseNewMap(data)
+        return
 
     def parseQData(self, data: 'QData'):
         if data.get('q', None).get('upgrade', False):
             self.q['upgrade'] = data['q']['upgrade']
         if data.get('q', None).get('compound', False):
             self.q['compound'] = data['q']['compound']
+        return
 
     def setNextSkill(self, skill: str, next: datetime):
         self.nextSkill[skill] = next
         if self.G['skills'][skill].get('share', False):
             self.nextSkill[self.G['skills'][skill]['share']] = next
+        return
 
     def updatePositions(self):
         if getattr(self, 'lastPositionUpdate'):
@@ -204,87 +210,103 @@ class Character(Observer.Observer):
                     self.s[condition]['ms'] = newCooldown
 
         super().updatePositions()
+        return
+
+    def disconnectHandler(self):
+        self.ready = False
+        return
+
+    def disconnectReasonHandler(self):
+        self.ready = False
+        return
+
+    def friendHandler(self, data):
+        if data['event'] in ['lost', 'new', 'update']:
+            self.friends = data['friends']
+        return
+
+    def startHandler(self, data):
+        self.going_x = data['x']
+        self.going_y = data['y']
+        self.moving = False
+        self.damage_type = self.G['classes'][data['ctype']]['damage_type']
+        self.parseCharacter(data)
+        if data.get('entities', False):
+            self.parseEntities(data['entities'])
+        self.S = data['s_info']
+        self.ready = True
+        return
+
+    def achievementProgressHandler(self, data):
+        self.achievements[data['name']] = data
+        return
+
+    def chestOpenedHandler(self, data):
+        del self.chests[data['id']]
+        return
+
+    def dropHandler(self, data):
+        self.chests[data['id']] = data
+        return
+
+    def evalHandler(self, data):
+        self.parseEval(data)
+        return
+
+    def gameErrorHandler(self, data):
+        if type(data) == str:
+            print(f'Game Error:\n{data}')
+        else:
+            print('Game Error:')
+            print(str(data))
+        return
+
+    def gameResponseHandler(self, data):
+        self.parseGameResponse(data)
+        return
+
+    def partyUpdateHandler(self, data):
+        self.partyData = data
+        return
+
+    def playerHandler(self, data):
+        self.parseCharacter(data)
+        return
+
+    def qDataHandler(self, data):
+        self.parseQData(data)
+        return
+
+    def upgradeHandler(self, data):
+        if data['type'] == 'compound' and getattr(self, 'q', {}).get('compound', False):
+            del self.q['compound']
+        elif data['type'] == 'upgrade' and getattr(self, 'q', {}).get('upgrade', False):
+            del self.q['upgrade']
+        return
+
+    async def welcomeHandler(self, data):
+        await self.socket.emit('loaded', {'height': 1080, 'scale': 2, 'success': 1, 'width': 1920})
+        await self.socket.emit('auth', {'auth': self.userAuth, 'character': self.characterID, 'height': 1080, 'no_graphics': 'True', 'no_html': '1', 'passphrase': '', 'scale': 2, 'user': self.owner, 'width': 1920})
+        return
 
     async def connect(self):
         await super().connect(False, False)
 
-        @self.socket.event
-        def disconnect():
-            self.ready = False
-
-        @self.socket.event
-        def disconnect_reason():
-            self.ready = False
-
-        @self.socket.event
-        def friend(data):
-            if data['event'] == 'lost' or data['event'] == 'new' or data['event'] == 'update':
-                self.friends = data['friends']
-
-        @self.socket.event
-        def start(data):
-            self.going_x = data['x']
-            self.going_y = data['y']
-            self.moving = False
-            self.damage_type = self.G['classes'][data['ctype']]['damage_type']
-
-            self.parseCharacter(data)
-            if data.get('entities', False):
-                self.parseEntities(data['entities'])
-            self.S = data['s_info']
-            self.ready = True
-
-        @self.socket.event
-        def achievement_progress(data):
-            self.achievements[data['name']] = data
-
-        @self.socket.event
-        def chest_opened(data):
-            del self.chests[data['id']]
-
-        @self.socket.event
-        def drop(data):
-            self.chests[data['id']] = data
-
-        @self.socket.event
-        def eval(data):
-            self.parseEval(data)
-
-        @self.socket.event
-        def game_error(data):
-            if type(data) == str:
-                print(f'Game Error: {data}')
-            else:
-                print('Game Error:')
-                print(str(data))
-
-        @self.socket.event
-        def game_response(data):
-            self.parseGameResponse(data)
-
-        @self.socket.event
-        def party_update(data):
-            self.partyData = data
-
-        @self.socket.event
-        def player(data):
-            self.parseCharacter(data)
-
-        @self.socket.event
-        def q_data(data):
-            self.parseQData(data)
-
-        @self.socket.event
-        def upgrade(data):
-            if data['type'] == 'compound' and getattr(self, 'q', {}).get('compound', False):
-                del self.q['compound']
-            elif data['type'] == 'upgrade' and getattr(self, 'q', {}).get('upgrade', False):
-                del self.q['upgrade']
-
-        @self.socket.event
-        async def welcome(data):
-            await self.socket.emit('loaded', {'height': 1080, 'scale': 2, 'success': 1, 'width': 1920})
-            await self.socket.emit('auth', {'auth': self.userAuth, 'character': self.characterID, 'height': 1080, 'no_graphics': 'True', 'no_html': '1', 'passphrase': '', 'scale': 2, 'user': self.owner, 'width': 1920})
+        self.socket.on('disconnect', self.disconnectHandler)
+        self.socket.on('disconnect_reason', self.disconnectReasonHandler)
+        self.socket.on('friend', self.friendHandler)
+        self.socket.on('start', self.startHandler)
+        self.socket.on('achievement_progress', self.achievementProgressHandler)
+        self.socket.on('chest_opened', self.chestOpenedHandler)
+        self.socket.on('drop', self.dropHandler)
+        self.socket.on('eval', self.evalHandler)
+        self.socket.on('game_error', self.gameErrorHandler)
+        self.socket.on('game_response', self.gameResponseHandler)
+        self.socket.on('party_update', self.partyUpdateHandler)
+        self.socket.on('player', self.playerHandler)
+        self.socket.on('q_data', self.qDataHandler)
+        self.socket.on('upgrade', self.upgradeHandler)
+        self.socket.on('welcome', self.welcomeHandler)
 
         async def connectedFn():
             connected = asyncio.get_event_loop().create_future()
@@ -293,14 +315,17 @@ class Character(Observer.Observer):
                     connected.set_exception(Exception(f'Failed to connect: {data}'))
                 else:
                     connected.set_exception(Exception(f'Failed to connect: {data["message"]}'))
+                self.socket.on('start', self.startHandler)
+                self.socket.on('game_error', self.gameErrorHandler)
+                self.socket.on('disconnect_reason', self.disconnectReasonHandler)
             async def failCheck2(data):
                 connected.set_exception(Exception(f'Failed to connect: {data}'))
 
             async def startCheck(data):
-                self.socket.on('game_error', game_error)
-                self.socket.on('disconnect_reason', disconnect_reason)
-                start(data)
-                self.socket.on('start', start)
+                self.socket.on('game_error', self.gameErrorHandler)
+                self.socket.on('disconnect_reason', self.disconnectHandler)
+                self.startHandler(data)
+                self.socket.on('start', self.startHandler)
                 await self.updateLoop()
                 connected.set_result(None)
 
@@ -327,8 +352,10 @@ class Character(Observer.Observer):
 
         for timer in self.timeouts.values():
             Tools.clearTimeout(timer)
+        return
 
     async def requestEntitiesData(self):
+        print('requestEntitiesData called...')
         if not self.ready:
             raise Exception("We aren't ready yet [requestEntitiesData]")
 
@@ -349,4 +376,89 @@ class Character(Observer.Observer):
                 await asyncio.sleep(0.25)
             return entitiesData.result()
 
-        return await entitiesDataFn()
+        self.parseEntities(await entitiesDataFn())
+        return
+
+    async def requestPlayerData(self):
+        if not self.ready:
+            raise Exception("We aren't ready yet [requestPlayerData]")
+
+        async def playerDataFn():
+            playerData = asyncio.get_event_loop().create_future()
+            def checkPlayerEvent(data):
+                if data.get('s', {}).get('typing', False):
+                    playerData.set_result(data)
+                    self.socket.on('player', self.playerHandler)
+
+            def reject(reason):
+                if not playerData.done():
+                    playerData.set_exception(Exception(reason))
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'requestPlayerData timeout ({Constants.TIMEOUT}s)')
+            self.socket.on('player', checkPlayerEvent)
+
+            await self.socket.emit('property', {'typing': True})
+            while not playerData.done():
+                await asyncio.sleep(0.25)
+            return playerData.result()
+
+        self.parseCharacter(await playerDataFn())
+        return
+
+    async def acceptFriendRequest(self, id: str):
+        if not self.ready:
+            raise Exception("We aren't ready yet [acceptFriendRequest].")
+
+        async def friendReqFn():
+            friended = asyncio.get_event_loop().create_future()
+            def successCheck(data):
+                if data['event'] == 'new':
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    friended.set_result(data)
+
+            def failCheck(data):
+                if type(data) == str:
+                    if data == 'friend_expired':
+                        reject('Friend request expired.')
+
+            def reject(reason):
+                if not friended.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    friended.set_exception(Exception(reason))
+
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'acceptFriendRequest timeout ({Constants.TIMEOUT}s)')
+            self.socket.on('friend', successCheck)
+            self.socket.on('game_response', failCheck)
+            
+            await self.socket.emit('friend', { 'event': 'accept', 'name': id })
+            while not friended.done():
+                await asyncio.sleep(0.25)
+            return friended.result()
+
+        await friendReqFn()
+        return
+
+    async def acceptMagiport(self, name: str):
+        if not self.ready:
+            raise Exception("We aren't ready yet [acceptMagiport].")
+
+        async def magiportFn():
+            acceptedMagiport = asyncio.get_event_loop().create_future()
+            def magiportCheck(data):
+                if data.get('effect', "") == 'magiport':
+                    self.socket.on('new_map', self.newMapHandler)
+                    acceptedMagiport.set_result({'map': data['name'], 'x': data['x'], 'y': data['y'] })
+
+            def reject(reason):
+                if not acceptedMagiport.done():
+                    self.socket.on('new_map', self.newMapHandler)
+                    acceptedMagiport.set_exception(Exception(reason))
+
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'acceptMagiport timeout ({Constants.TIMEOUT}s)')
+            self.socket.on('new_map', magiportCheck)
+            await self.socket.emit('magiport', { 'name': name })
+            while not acceptedMagiport.done():
+                await asyncio.sleep(0.25)
+            return acceptedMagiport.result()
+
+        await magiportFn()
+        return

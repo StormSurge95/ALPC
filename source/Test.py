@@ -17,11 +17,9 @@ async def main():
     async with aiohttp.ClientSession() as session:
         await Game.loginJSONFile(session, '..\credentials.json')
         await Game.getGData(session, True, True)
-        logger.info('starting Observer')
         #await Game.startObserver(session, 'US', 'III')
         char = await Game.startCharacter(session, 'StormSurge', 'US', 'III')
-        await char.requestEntitiesData()
-        await asyncio.sleep(60)
+        await asyncio.sleep(70)
         await char.disconnect()
     print('Test Complete')
 
