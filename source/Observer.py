@@ -88,7 +88,7 @@ class Observer:
     def gameEventHandler(self, data):
         if (self.G.get('monsters', {}).get(data['name'], False)):
             monsterData = { 'hp': self.G['monsters'][data['name']]['hp'], 'lastSeen': datetime.datetime.now(), 'level': 1, 'map': data['map'], 'x': data['x'], 'y': data['y'] }
-            self.S[data['name']] = { **monsterData, 'live': True, 'max_hp': monsterData['hp'] }
+            self.S[data['name']] = {**monsterData, 'live': True, 'max_hp': monsterData['hp']}
         #TODO: Add database methods
         return
 
@@ -178,7 +178,9 @@ class Observer:
                 while not connected.done():
                     await asyncio.sleep(0.25)
                 return connected.result()
-            return await connectedFn()
+            await connectedFn()
+            return
+        return
 
     def deleteEntity(self, id: str, death: bool=False) -> bool:
         entity = self.entities.get(id, None)
@@ -201,12 +203,10 @@ class Observer:
             self.lastPositionUpdate = datetime.datetime.now()
         else:
             self.updatePositions()
-
         visibleIDs = []
         entityUpdates = []
         npcUpdates = []
         playerUpdates = []
-
         for monster in data['monsters']:
             e = None
             if not self.entities.get(monster['id'], None):
@@ -216,9 +216,7 @@ class Observer:
                 e = self.entities[monster['id']]
                 e.updateData(monster)
             visibleIDs.append(e.id)
-
         #TODO: database stuff
-
         for player in data['players']:
             p = None
             if not self.players.get(player['id'], None):
@@ -227,24 +225,22 @@ class Observer:
             else:
                 p = self.players[player['id']]
                 p.updateData(player)
-        
         #TODO: database stuff
+        return
 
     def parseNewMap(self, data):
         self.projectiles.clear()
-
         self.x = data['x']
         self.y = data['y']
         self.map = data['name']
-
         self.parseEntities(data['entities'])
+        return
 
     def updatePositions(self):
         if getattr(self, 'lastPositionUpdate'):
             msSinceLastUpdate = (datetime.datetime.now() - self.lastPositionUpdate).total_seconds() * 1000
             if msSinceLastUpdate == 0:
                 return
-
             for entity in self.entities.values():
                 if not getattr(entity, 'moving', False):
                     continue
@@ -266,7 +262,6 @@ class Observer:
                         del entity.s[condition]
                     else:
                         entity.s[condition]['ms'] = newCooldown
-
             for player in self.players.values():
                 if not getattr(player, 'moving', False):
                     continue
@@ -288,7 +283,6 @@ class Observer:
                         del player.s[condition]
                     else:
                         player.s[condition]['ms'] = newCooldown
-
         toDelete = []
         for id in self.entities.keys():
             if Tools.distance(self, self.entities[id]) < Constants.MAX_VISIBLE_RANGE:
@@ -296,7 +290,6 @@ class Observer:
             toDelete.append(id)
         for id in toDelete:
             self.deleteEntity(id)
-
         toDelete.clear()
         for id in self.players.keys():
             if Tools.distance(self, self.players[id]) < Constants.MAX_VISIBLE_RANGE:
@@ -304,18 +297,15 @@ class Observer:
             toDelete.append(id)
         for id in toDelete:
             del self.players[id]
-
         for id in list(self.projectiles):
             if (datetime.datetime.now() - self.projectiles[id]['date']).total_seconds() > Constants.STALE_PROJECTILE_S:
                 del self.projectiles[id]
-
         self.lastPositionUpdate = datetime.datetime.now()
+        return
 
     async def sendPing(self, log: bool=True):
         pingID = str(self.pingNum)
         self.pingNum += 1
-
         self.pingMap[pingID] = {'log': log, 'time': datetime.datetime.now() }
-
         await self.socket.emit('ping_trig', { 'id': pingID })
         return pingID

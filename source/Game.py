@@ -19,11 +19,6 @@ logger.addHandler(handler)
 class Game:
     loggedIn: bool = False
 
-    logger = logging.getLogger(__name__)
-    handler = logging.StreamHandler(sys.stdout)
-    logger.addHandler(handler)
-    logger.setLevel(logging.DEBUG)
-
     servers: dict = {}
     characters: dict = {}
 
