@@ -468,7 +468,7 @@ class Character(Observer.Observer):
         async def partyInvFn():
             acceptedInvite = asyncio.get_event_loop().create_future()
             def partyCheck(data):
-                if 'list' in data.keys() and self.id in data['list'] and id in data['list']:
+                if ('list' in data.keys()) and (self.id in data['list']) and (id in data['list']):
                     acceptedInvite.set_result(data)
 
     async def acceptPartyRequest(self, id: str):

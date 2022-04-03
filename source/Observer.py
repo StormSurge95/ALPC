@@ -18,7 +18,7 @@ handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime
 logger.addHandler(handler)
 
 class Observer:
-    pingsPerServer: dict = {}
+    pingsPerServer : dict = {}
 
     def __init__(self, serverData: dict, g: dict):
         self.socket = socketio.AsyncClient()
@@ -44,146 +44,143 @@ class Observer:
             pings = Observer.pingsPerServer.get(key, False)
             if (pings != False):
                 self.pings = pings
+        return
 
-    async def connect(self, reconnect: bool = False, start: bool = True):
+    def actionHandler(self, data):
+        if data.get('instant', False):
+            return
+
+        attacker = self.players.get(data['attacker'], self.entities.get(data['attacker'], None))
+        target = self.entities.get(data['attacker'], self.players.get(data['attacker'], None))
+        projectileSpeed = self.G['projectiles'].get(data['projectile'], None).get('speed', None)
+        if attacker and target and projectileSpeed:
+            distance = Tools.distance(attacker, target)
+            fixedETA = (distance / projectileSpeed) * 1000
+            data['eta'] = fixedETA
+
+        self.projectiles[data['pid']] = { **data, 'date': datetime.datetime.now()}
+        return
+
+    def deathHandler(self, data):
+        self.deleteEntity(data['id'], True)
+        return
+
+    def disappearHandler(self, data):
+        if self.players.get(data['id'], False):
+            del self.players[data['id']]
+        else:
+            self.deleteEntity(data['id'])
+        self.updatePositions()
+        #TODO: Add database functions
+        return
+
+    def disconnectHandler(self):
+        if (not self.serverData) or (not self.pings) or (len(self.pings) == 0):
+            return
+        key = f"{self.serverData['region']}{self.serverData['name']}"
+        Observer.pingsPerServer[key] = self.pings
+        return
+
+    def entitiesHandler(self, data):
+        self.parseEntities(data)
+        return
+
+    def gameEventHandler(self, data):
+        if (self.G.get('monsters', {}).get(data['name'], False)):
+            monsterData = { 'hp': self.G['monsters'][data['name']]['hp'], 'lastSeen': datetime.datetime.now(), 'level': 1, 'map': data['map'], 'x': data['x'], 'y': data['y'] }
+            self.S[data['name']] = { **monsterData, 'live': True, 'max_hp': monsterData['hp'] }
+        #TODO: Add database methods
+        return
+
+    def hitHandler(self, data):
+        if data.get('pid', False) == False:
+            return
+        if data.get('miss', False) or data.get('evade', False):
+            if self.projectiles.get(data['pid'], False):
+                del self.projectiles[data['pid']]
+            return
+        if data.get('reflect', False):
+            p = self.projectiles.get(data['pid'], None)
+            if p:
+                p['damage'] = data['reflect']
+                p['target'] = data['hid']
+                p['x'] = self.x
+                p['y'] = self.y
+        if data.get('kill', False):
+            if self.projectiles.get(data['pid'], False):
+                del self.projectiles[data['pid']]
+            self.deleteEntity(data['id'], True)
+        elif data.get('damage', False):
+            if self.projectiles.get(data['pid'], False):
+                del self.projectiles[data['pid']]
+            e = self.entities.get(data['id'], None)
+            if e:
+                e.hp = e.hp - data['damage']
+        else:
+            if self.projectiles.get(data['pid'], False):
+                del self.projectiles[date['pid']]
+        return
+
+    def newMapHandler(self, data):
+        self.parseNewMap(data)
+        return
+
+    def pingAckHandler(self, data):
+        ping = self.pingMap.get(data['id'], None)
+        if ping:
+            time = (datetime.datetime.now() - ping.time).total_seconds()
+            self.pings[self.pingIndex] = time
+            self.pingIndex += 1
+            self.pingIndex = self.pingIndex % Constants.MAX_PINGS
+            if ping.get('log', False):
+                print(f"Ping: {time}s")
+            del self.pingMap[data['id']]
+        return
+
+    #TODO: server_info event handler
+
+    def welcomeHandler(self, data):
+        self.server = data
+        return
+
+    async def connect(self, reconnect: bool=False, start: bool=True):
         addr = self.serverData['addr']
         port = self.serverData['port']
         url = f"ws://{addr}:{port}"
         await self.socket.connect(url)
 
-        @self.socket.event
-        def action(data):
-            if data.get('instant', False):
-                return
-
-            attacker = self.players.get(data['attacker'], self.entities.get(data['attacker'], None))
-            target = self.entities.get(data['attacker'], self.players.get(data['attacker'], None))
-            projectileSpeed = self.G['projectiles'].get(data['projectile'], None).get('speed', None)
-            if attacker and target and projectileSpeed:
-                distance = Tools.distance(attacker, target)
-                fixedETA = (distance / projectileSpeed) * 1000
-                data['eta'] = fixedETA
-
-            self.projectiles[data['pid']] = { **data, 'date': datetime.datetime.now()}
-
-        @self.socket.event
-        def death(data):
-            self.deleteEntity(data['id'], True)
-
-        @self.socket.event
-        def disappear(data):
-            if self.players.get(data['id'], False):
-                del self.players[data['id']]
-            else:
-                self.deleteEntity(data['id'])
-
-            self.updatePositions()
-
-            return
-        #TODO: add database functions
-
-        @self.socket.event
-        def disconnect():
-            if not self.serverData or not self.pings or len(self.pings) == 0:
-                return
-            key = f"{self.serverData['region']}{self.serverData['name']}"
-            Observer.pingsPerServer[key] = self.pings
-
-        @self.socket.event
-        def entities(data):
-            self.parseEntities(data)
-
-        @self.socket.event
-        def game_event(data):
-            if self.G['monsters'][data['name']]:
-                monsterData = {
-                    'hp': self.G['monsters'][data['name']]['hp'],
-                    'lastSeen': datetime.datetime.now(),
-                    'level': 1,
-                    'map': data['map'],
-                    'x': data['x'],
-                    'y': data['y']
-                }
-
-                self.S[data.name] = {
-                    **monsterData,
-                    'live': true,
-                    'max_hp': monsterData['hp']
-                }
-
-        #TODO: Add database method
-
-        @self.socket.event
-        def hit(data):
-            if data.get('pid', False) == False:
-                return
-            if data.get('miss', False) or data.get('evade', False):
-                if self.projectiles.get(data['pid'], False):
-                    del self.projectiles[data['pid']]
-                return
-
-            if data.get('reflect', False):
-                p = self.projectiles.get(data['pid'], None)
-                if p:
-                    p['damage'] = data['reflect']
-                    p['target'] = data['hid']
-                    p['x'] = self.x
-                    p['y'] = self.y
-
-            if data.get('kill', False):
-                if self.projectiles.get(data['pid'], False):
-                    del self.projectiles[data['pid']]
-                self.deleteEntity(data['id'], True)
-            elif data.get('damage', False):
-                if self.projectiles.get(data['pid'], False):
-                    del self.projectiles[data['pid']]
-                e = self.entities.get(data['id'], None)
-                if e:
-                    e.hp = e.hp - data['damage']
-            else:
-                if self.projectiles.get(data['pid'], False):
-                    del self.projectiles[data['pid']]
-
-        @self.socket.event
-        def new_map(data):
-            self.parseNewMap(data)
-
-        @self.socket.event
-        def ping_ack(data):
-            ping = self.pingMap.get(data['id'], None)
-            if ping:
-                time = datetime.datetime.now() - ping.time
-                self.pings[self.pingIndex] = time
-                self.pingIndex += 1
-                self.pingIndex = self.pingIndex % Constants.MAX_PINGS
-                if ping.log:
-                    print(f"Ping: {time}")
-
-                del self.pingMap[data['id']]
-
-        #TODO: server_info event
-
-        def welcomeFn(data):
-            self.server = data
-
+        self.socket.on('action', self.actionHandler)
+        self.socket.on('death', self.deathHandler)
+        self.socket.on('disappear', self.disappearHandler)
+        self.socket.on('disconnect', self.disconnectHandler)
+        self.socket.on('entities', self.entitiesHandler)
+        self.socket.on('game_event', self.gameEventHandler)
+        self.socket.on('hit', self.hitHandler)
+        self.socket.on('new_map', self.newMapHandler)
+        self.socket.on('ping_ack', self.pingAckHandler)
+        self.socket.on('welcome', self.welcomeHandler)
+        
         if start:
             async def connectedFn():
                 connected = asyncio.get_event_loop().create_future()
-                @self.socket.event
-                async def welcome(data):
-                    print(data)
+                async def welcomeFn(data):
                     if (data['region'] != self.serverData['region']) or (data['name'] != self.serverData['name']):
                         connected.set_exception(Exception(f"We wanted the server {self.serverData['region']}{self.serverData['name']}, but we are on {data['region']}{data['name']}."))
                     else:
                         await self.socket.emit('loaded', {'height':1080, 'scale':2, 'success':1, 'width':1920})
                         connected.set_result(True)
-                    welcomeFn(data)
+                    self.welcomeHandler(data)
+                def reject(reason):
+                    if not connected.done():
+                        connected.set_exception(Exception(reason))
+                self.socket.on('welcome', welcomeFn)
+                Tools.setTimeout(reject, Constants.CONNECT_TIMEOUT_S, f'Failed to start within {Constants.CONNECT_TIMEOUT_S}s.')
                 while not connected.done():
                     await asyncio.sleep(0.25)
                 return connected.result()
             return await connectedFn()
 
-    def deleteEntity(self, id: str, death: bool = False) -> bool:
+    def deleteEntity(self, id: str, death: bool=False) -> bool:
         entity = self.entities.get(id, None)
         if entity:
             if self.S.get(entity.type, None) and death:
@@ -314,7 +311,7 @@ class Observer:
 
         self.lastPositionUpdate = datetime.datetime.now()
 
-    async def sendPing(self, log: bool = True):
+    async def sendPing(self, log: bool=True):
         pingID = str(self.pingNum)
         self.pingNum += 1
 

@@ -17,10 +17,10 @@ async def main():
     async with aiohttp.ClientSession() as session:
         await Game.loginJSONFile(session, '..\credentials.json')
         await Game.getGData(session, True, True)
-        #await Game.startObserver(session, 'US', 'III')
-        char = await Game.startCharacter(session, 'StormSurge', 'US', 'III')
-        await asyncio.sleep(70)
-        await char.disconnect()
+        await Game.startObserver(session, 'US', 'III')
+        #char = await Game.startCharacter(session, 'StormSurge', 'US', 'III')
+        await asyncio.sleep(30)
+        #await char.disconnect()
     print('Test Complete')
 
 asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
