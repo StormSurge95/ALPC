@@ -3,7 +3,7 @@ import socketio
 import datetime
 from Entity import Entity
 from Player import Player
-from database.Database import Database
+#from database.Database import Database
 from Tools import Tools
 from Constants import Constants
 import logging
@@ -118,7 +118,7 @@ class Observer:
                 e.hp = e.hp - data['damage']
         else:
             if self.projectiles.get(data['pid'], False):
-                del self.projectiles[date['pid']]
+                del self.projectiles[data['pid']]
         return
 
     def newMapHandler(self, data):
