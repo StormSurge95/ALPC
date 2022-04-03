@@ -31,13 +31,11 @@ class Character(Observer.Observer):
         self.achievements = {}
         self.timeouts = {}
         Observer.Observer.__init__(self, serverData, g)
-        return self
+        return
 
-    @asyncio.coroutine
     async def updateLoopFn(self):
         return await self.updateLoop();
 
-    @asyncio.coroutine
     async def updateLoop(self):
         if (not bool(self.socket)) or (not self.socket.connected) or (not self.ready):
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoopFn, Constants.UPDATE_POSITIONS_EVERY_S)
@@ -462,3 +460,16 @@ class Character(Observer.Observer):
 
         await magiportFn()
         return
+       
+    async def acceptPartyInvite(self, id: str):
+        if not self.ready:
+            raise Exception("We aren't ready yet [acceptPartyInvite].")
+
+        async def partyInvFn():
+            acceptedInvite = asyncio.get_event_loop().create_future()
+            def partyCheck(data):
+                if 'list' in data.keys() and self.id in data['list'] and id in data['list']:
+                    acceptedInvite.set_result(data)
+
+    async def acceptPartyRequest(self, id: str):
+        pass
