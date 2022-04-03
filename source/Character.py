@@ -4,9 +4,7 @@ from Tools import Tools
 from Constants import Constants
 from datetime import datetime
 import asyncio
-import socketio
 import logging
-import ujson
 import re
 import sys
 import math
@@ -34,7 +32,7 @@ class Character(Observer.Observer):
         return
 
     async def updateLoopFn(self):
-        return await self.updateLoop();
+        return await self.updateLoop()
 
     async def updateLoop(self):
         if (not bool(self.socket)) or (not self.socket.connected) or (not self.ready):
@@ -57,17 +55,16 @@ class Character(Observer.Observer):
         else:
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoopFn, Constants.UPDATE_POSITIONS_EVERY_S - msSinceLastUpdate)
             return
-        return
 
     def parseCharacter(self, data):
         self.updatePositions()
         for datum in list(data):
             if datum == 'hitchhikers':
-                for [event, datum] in data[hitchhikers].items():
+                for [event, dat] in data['hitchhikers'].items():
                     if event == 'game_response':
-                        self.parseGameResponse(datum)
+                        self.parseGameResponse(dat)
                     elif event == 'eval':
-                        self.parseEval(datum)
+                        self.parseEval(dat)
             elif datum == 'entities':
                 self.parseEntities(data[datum])
             elif datum == 'owner':
@@ -89,7 +86,7 @@ class Character(Observer.Observer):
         if hasattr(self, 'party'):
             for i in range(0, len(data['players'])):
                 player = data['players'][i]
-                partyPlayer = getattr(self, partyData, None).get('party', None).get(player.id, None)
+                partyPlayer = getattr(self, 'partyData', None).get('party', None).get(player.id, None)
                 if not partyPlayer:
                     continue
 
@@ -139,7 +136,7 @@ class Character(Observer.Observer):
         print(f'Unhandled \'eval\': {str(data)}')
         return
 
-    def parseGameResponse(self, data: 'GameResponseData'):
+    def parseGameResponse(self, data):
         if type(data) == dict:
             if data['response'] == 'cooldown':
                 skill = data.get('skill', data.get('place', None))
@@ -159,7 +156,7 @@ class Character(Observer.Observer):
                 pass # ignore. We resolve our skills a different way than the vanilla client
         return
 
-    def parseNewMap(self, data: 'NewMapData'):
+    def parseNewMap(self, data):
         setattr(self, 'going_x', data['x'])
         setattr(self, 'going_y', data['y'])
         setattr(self, 'in', data['in'])
@@ -169,7 +166,7 @@ class Character(Observer.Observer):
         super().parseNewMap(data)
         return
 
-    def parseQData(self, data: 'QData'):
+    def parseQData(self, data):
         if data.get('q', None).get('upgrade', False):
             self.q['upgrade'] = data['q']['upgrade']
         if data.get('q', None).get('compound', False):
@@ -285,6 +282,7 @@ class Character(Observer.Observer):
     async def welcomeHandler(self, data):
         await self.socket.emit('loaded', {'height': 1080, 'scale': 2, 'success': 1, 'width': 1920})
         await self.socket.emit('auth', {'auth': self.userAuth, 'character': self.characterID, 'height': 1080, 'no_graphics': 'True', 'no_html': '1', 'passphrase': '', 'scale': 2, 'user': self.owner, 'width': 1920})
+        self.welcomeHandler(data)
         return
 
     async def connect(self):
@@ -469,7 +467,64 @@ class Character(Observer.Observer):
             acceptedInvite = asyncio.get_event_loop().create_future()
             def partyCheck(data):
                 if ('list' in data.keys()) and (self.id in data['list']) and (id in data['list']):
+                    self.socket.handlers['/'].pop('party_update')
+                    self.socket.handlers['/'].pop('game_log')
                     acceptedInvite.set_result(data)
+            
+            def unableCheck(data):
+                if data == 'Invitation expired':
+                    reject(data)
+                elif type(data) == str and re.match('^.+? is not found$', data):
+                    reject(data)
+                elif data == 'Already partying':
+                    if (self.id in self.partyData['list']) and (id in self.partyData['list']):
+                        self.socket.handlers['/'].pop('party_update')
+                        self.socket.handlers['/'].pop('game_log')
+                        acceptedInvite.set_result(self.partyData)
+                    else:
+                        reject(data)
+            
+            def reject(reason):
+                if not acceptedInvite.done():
+                    self.socket.handlers['/'].pop('party_update')
+                    self.socket.handlers['/'].pop('game_log')
+                    acceptedInvite.set_exception(Exception(reason))
+            
+            Tools.setTimeout(reject, Constants.Timeout, f'acceptPartyInvite timeout ({Constants.TIMEOUT}s)')
+            self.socket.on('party_update', partyCheck)
+            self.socket.on('game_log', unableCheck)
+            await self.socket.emit('party', { 'event': 'accept', 'name': id })
+            while not acceptedInvite.done():
+                await asyncio.sleep(0.25)
+            return acceptedInvite.result()
+
+        await partyInvFn()
+        return
 
     async def acceptPartyRequest(self, id: str):
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [acceptPartyRequest].")
+        
+        async def partyReqFn():
+            acceptedRequest = asyncio.get_event_loop().create_future()
+            def partyCheck(data):
+                if (data.get('list', False)) and (self.id in data['list']) and (id in data['list']):
+                    self.socket.handlers['/'].pop('party_update')
+                    acceptedRequest.set_result(data)
+                
+            def reject(reason):
+                if not acceptedRequest.done():
+                    self.socket.handlers['/'].pop('party_update')
+                    acceptedRequest.set_exception(Exception(reason))
+            
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'acceptPartyRequest timeout {Constants.TIMEOUT}s)')
+            self.socket.on('party_update', partyCheck)
+            await self.socket.emit('party', { 'event': 'raccept', 'name': id })
+            while not acceptedRequest.done():
+                await asyncio.sleep(0.25)
+            return acceptedRequest.result()
+        
+        await partyReqFn()
+        return
+
+        
