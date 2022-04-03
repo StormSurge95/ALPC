@@ -46,6 +46,9 @@ class Observer:
                 self.pings = pings
         return
 
+    def defaultHandler(self, data):
+        return
+
     def actionHandler(self, data):
         if data.get('instant', False):
             return

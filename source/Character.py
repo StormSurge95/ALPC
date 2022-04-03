@@ -467,8 +467,8 @@ class Character(Observer.Observer):
             acceptedInvite = asyncio.get_event_loop().create_future()
             def partyCheck(data):
                 if ('list' in data.keys()) and (self.id in data['list']) and (id in data['list']):
-                    self.socket.handlers['/'].pop('party_update')
-                    self.socket.handlers['/'].pop('game_log')
+                    self.socket.on('party_update', self.defaultHandler)
+                    self.socket.on('game_log', self.defaultHandler)
                     acceptedInvite.set_result(data)
             
             def unableCheck(data):
@@ -478,16 +478,16 @@ class Character(Observer.Observer):
                     reject(data)
                 elif data == 'Already partying':
                     if (self.id in self.partyData['list']) and (id in self.partyData['list']):
-                        self.socket.handlers['/'].pop('party_update')
-                        self.socket.handlers['/'].pop('game_log')
+                        self.socket.on('party_update', self.defaultHandler)
+                        self.socket.on('game_log', self.defaultHandler)
                         acceptedInvite.set_result(self.partyData)
                     else:
                         reject(data)
             
             def reject(reason):
                 if not acceptedInvite.done():
-                    self.socket.handlers['/'].pop('party_update')
-                    self.socket.handlers['/'].pop('game_log')
+                    self.socket.on('party_update', self.defaultHandler)
+                    self.socket.on('game_log', self.defaultHandler)
                     acceptedInvite.set_exception(Exception(reason))
             
             Tools.setTimeout(reject, Constants.Timeout, f'acceptPartyInvite timeout ({Constants.TIMEOUT}s)')
@@ -509,12 +509,12 @@ class Character(Observer.Observer):
             acceptedRequest = asyncio.get_event_loop().create_future()
             def partyCheck(data):
                 if (data.get('list', False)) and (self.id in data['list']) and (id in data['list']):
-                    self.socket.handlers['/'].pop('party_update')
+                    self.socket.on('party_update', self.defaultHandler)
                     acceptedRequest.set_result(data)
                 
             def reject(reason):
                 if not acceptedRequest.done():
-                    self.socket.handlers['/'].pop('party_update')
+                    self.socket.on('party_update', self.defaultHandler)
                     acceptedRequest.set_exception(Exception(reason))
             
             Tools.setTimeout(reject, Constants.TIMEOUT, f'acceptPartyRequest timeout {Constants.TIMEOUT}s)')
@@ -527,4 +527,58 @@ class Character(Observer.Observer):
         await partyReqFn()
         return
 
-        
+    async def basicAttack(self, id: str):
+        if not self.ready:
+            raise Exception("We aren't ready yet [basicAttack].")
+        async def attackFn():
+            attackStarted = asyncio.get_event_loop().create_future()
+            def reject(reason):
+                if not attackStarted.done():
+                    self.socket.on('action', self.defaultHandler)
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('notthere', self.defaultHandler)
+                    self.socket.on('death', self.defaultHandler)
+                    attackStarted.set_exception(Exception(reason))
+            def resolve(value):
+                if not attackStarted.done():
+                    self.socket.on('action', self.defaultHandler)
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('notthere', self.defaultHandler)
+                    self.socket.on('death', self.defaultHandler)
+                    attackStarted.set_result(value)
+            def deathCheck(data):
+                if data['id'] == id:
+                    reject(f'Entity {id} not found')
+                return
+            def failCheck(data):
+                if type(data) == dict:
+                    if data.get('response', None) == 'disabled':
+                        reject(f'Attack on {id} failed (disabled).')
+                    elif (data.get('response', None) == 'attack_failed') and (data.get('id', None) == id):
+                        reject(f'Attack on {id} failed.')
+                    elif (data.get('response', None) == 'too_far') and (data.get('place', None) == 'attack') and (data.get('id', None) == id):
+                        dist = data.get('dist')
+                        reject(f'{id} is too far away to attack (dist: {dist}).')
+                    elif (data.get('response', None) == 'cooldown') and (data.get('place', None) == 'attack') and (data.get('id', None) == id):
+                        ms = data.get('ms')
+                        reject(f'Attack on {id} failed due to cooldown (ms: {ms}).')
+                    elif (data.get('response', None) == 'no_mp') and (data.get('place', None) == 'attack'):
+                        reject(f'Attack on {id} failed due to insufficient MP.')
+                return
+            def failCheck2(data):
+                if data.get('place', None) == 'attack':
+                    reject(f'{id} could not be found to attack.')
+            def attackCheck(data):
+                if (data.get('attacker') == self.id) and (data.get('target') == id) and (data.get('type', None) == 'attack'):
+                    resolve(data['pid'])
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'attack timeout ({Constants.TIMEOUT}s)')
+            self.socket.on('action', attackCheck)
+            self.socket.on('game_response', failCheck)
+            self.socket.on('notthere', failCheck2)
+            self.socket.on('death', deathCheck)
+            while not attackStarted.done():
+                await asyncio.sleep(0.25)
+            return attackStarted.result()
+        return await attackFn()
+
+    
