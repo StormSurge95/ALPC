@@ -17,7 +17,7 @@ handler.setLevel(logging.DEBUG)
 handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
 logger.addHandler(handler)
 
-class Observer:
+class Observer(object):
     pingsPerServer : dict = {}
 
     def __init__(self, serverData: dict, g: dict):
@@ -151,6 +151,7 @@ class Observer:
         port = self.serverData['port']
         url = f"ws://{addr}:{port}"
         await self.socket.connect(url)
+        self.socket.reconnection = reconnect
 
         self.socket.on('action', self.actionHandler)
         self.socket.on('death', self.deathHandler)
@@ -161,7 +162,7 @@ class Observer:
         self.socket.on('hit', self.hitHandler)
         self.socket.on('new_map', self.newMapHandler)
         self.socket.on('ping_ack', self.pingAckHandler)
-        self.socket.on('welcome', self.welcomeHandler)
+        self.socket.on('welcome', self.welcomeHandler, )
         
         if start:
             async def connectedFn():
@@ -181,8 +182,11 @@ class Observer:
                 while not connected.done():
                     await asyncio.sleep(0.25)
                 return connected.result()
-            await connectedFn()
-            return
+            try:
+                await connectedFn()
+            except Exception as e:
+                print('Error:', e)
+                return
         return
 
     def deleteEntity(self, id: str, death: bool=False) -> bool:
@@ -312,3 +316,12 @@ class Observer:
         self.pingMap[pingID] = {'log': log, 'time': datetime.datetime.now() }
         await self.socket.emit('ping_trig', { 'id': pingID })
         return pingID
+
+    @staticmethod
+    async def tryExcept(func, *args, **kwargs):
+        try:
+            ret = await func(*args, **kwargs)
+            return ret
+        except Exception as e:
+            print('Error:', e)
+            return

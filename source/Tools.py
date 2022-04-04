@@ -46,3 +46,7 @@ class Tools:
     @staticmethod
     def clearTimeout(fut):
         fut.cancel()
+
+    @staticmethod
+    def hasKey(dic: dict, key: str):
+        return (key in dic.keys())
