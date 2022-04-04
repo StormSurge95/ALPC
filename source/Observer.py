@@ -320,8 +320,7 @@ class Observer(object):
     @staticmethod
     async def tryExcept(func, *args, **kwargs):
         try:
-            ret = await func(*args, **kwargs)
-            return ret
+            return await func(*args, **kwargs)
         except Exception as e:
             print('Error:', e)
             return

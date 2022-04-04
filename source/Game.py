@@ -121,8 +121,8 @@ class Game:
 
     @staticmethod
     async def login(session: aiohttp.ClientSession, email: str, password: str, mongo: str = ''):
-        if bool(mongo) and (not Database.connection):
-            await Database.connect(mongo)
+        #if bool(mongo) and (not Database.connection):
+            #await Database.connect(mongo)
         if not Game.loggedIn:
             print('Logging in...')
             params = {}

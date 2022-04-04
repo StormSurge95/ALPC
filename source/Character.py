@@ -34,10 +34,7 @@ class Character(Observer):
         super().__init__(serverData, g)
         return
 
-    async def updateLoopFn(self):
-        return await self.updateLoop()
-
-    async def updateLoop(self):
+    async def updateLoop(self) -> None:
         if (not bool(self.socket)) or (not self.socket.connected) or (not self.ready):
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoopFn, Constants.UPDATE_POSITIONS_EVERY_S)
             return
@@ -59,7 +56,7 @@ class Character(Observer):
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoopFn, Constants.UPDATE_POSITIONS_EVERY_S - msSinceLastUpdate)
             return
 
-    def parseCharacter(self, data):
+    def parseCharacter(self, data) -> None:
         self.updatePositions()
         for datum in list(data):
             if datum == 'hitchhikers':
@@ -85,7 +82,7 @@ class Character(Observer):
             self.damage_type = self.G['classes'][self.ctype]['damage_type']
         return
 
-    def parseEntities(self, data):
+    def parseEntities(self, data) -> None:
         if hasattr(self, 'party'):
             for i in range(0, len(data['players'])):
                 player = data['players'][i]
@@ -106,7 +103,7 @@ class Character(Observer):
         super().parseEntities(data)
         return
 
-    def parseEval(self, data):
+    def parseEval(self, data) -> None:
         skillReg = re.search("^skill_timeout\s*\(\s*['\"](.+?)['\"]\s*,?\s*(\d+\.?\d+?)?\s*\)", data['code'])
         if skillReg is not None:
             skill = skillReg.group(1)
@@ -139,7 +136,7 @@ class Character(Observer):
         print(f'Unhandled \'eval\': {str(data)}')
         return
 
-    def parseGameResponse(self, data):
+    def parseGameResponse(self, data) -> None:
         if type(data) == dict:
             if data['response'] == 'cooldown':
                 skill = data.get('skill', data.get('place', None))
@@ -159,7 +156,7 @@ class Character(Observer):
                 pass # ignore. We resolve our skills a different way than the vanilla client
         return
 
-    def parseNewMap(self, data):
+    def parseNewMap(self, data) -> None:
         setattr(self, 'going_x', data['x'])
         setattr(self, 'going_y', data['y'])
         setattr(self, 'in', data['in'])
@@ -169,20 +166,20 @@ class Character(Observer):
         super().parseNewMap(data)
         return
 
-    def parseQData(self, data):
+    def parseQData(self, data) -> None:
         if data.get('q', None).get('upgrade', False):
             self.q['upgrade'] = data['q']['upgrade']
         if data.get('q', None).get('compound', False):
             self.q['compound'] = data['q']['compound']
         return
 
-    def setNextSkill(self, skill: str, next: datetime):
+    def setNextSkill(self, skill: str, next: datetime) -> None:
         self.nextSkill[skill] = next
         if self.G['skills'][skill].get('share', False):
             self.nextSkill[self.G['skills'][skill]['share']] = next
         return
 
-    def updatePositions(self):
+    def updatePositions(self) -> None:
         if getattr(self, 'lastPositionUpdate'):
             msSinceLastUpdate = (datetime.now() - self.lastPositionUpdate).total_seconds()
             if msSinceLastUpdate == 0:
@@ -210,20 +207,20 @@ class Character(Observer):
         super().updatePositions()
         return
 
-    def disconnectHandler(self):
+    def disconnectHandler(self) -> None:
         self.ready = False
         return
 
-    def disconnectReasonHandler(self):
+    def disconnectReasonHandler(self) -> None:
         self.ready = False
         return
 
-    def friendHandler(self, data):
+    def friendHandler(self, data) -> None:
         if data['event'] in ['lost', 'new', 'update']:
             self.friends = data['friends']
         return
 
-    def startHandler(self, data):
+    def startHandler(self, data) -> None:
         self.going_x = data['x']
         self.going_y = data['y']
         self.moving = False
@@ -235,23 +232,23 @@ class Character(Observer):
         self.ready = True
         return
 
-    def achievementProgressHandler(self, data):
+    def achievementProgressHandler(self, data) -> None:
         self.achievements[data['name']] = data
         return
 
-    def chestOpenedHandler(self, data):
+    def chestOpenedHandler(self, data) -> None:
         del self.chests[data['id']]
         return
 
-    def dropHandler(self, data):
+    def dropHandler(self, data) -> None:
         self.chests[data['id']] = data
         return
 
-    def evalHandler(self, data):
+    def evalHandler(self, data) -> None:
         self.parseEval(data)
         return
 
-    def gameErrorHandler(self, data):
+    def gameErrorHandler(self, data) -> None:
         if type(data) == str:
             print(f'Game Error:\n{data}')
         else:
@@ -259,36 +256,36 @@ class Character(Observer):
             print(str(data))
         return
 
-    def gameResponseHandler(self, data):
+    def gameResponseHandler(self, data) -> None:
         self.parseGameResponse(data)
         return
 
-    def partyUpdateHandler(self, data):
+    def partyUpdateHandler(self, data) -> None:
         self.partyData = data
         return
 
-    def playerHandler(self, data):
+    def playerHandler(self, data) -> None:
         self.parseCharacter(data)
         return
 
-    def qDataHandler(self, data):
+    def qDataHandler(self, data) -> None:
         self.parseQData(data)
         return
 
-    def upgradeHandler(self, data):
+    def upgradeHandler(self, data) -> None:
         if data['type'] == 'compound' and getattr(self, 'q', {}).get('compound', False):
             del self.q['compound']
         elif data['type'] == 'upgrade' and getattr(self, 'q', {}).get('upgrade', False):
             del self.q['upgrade']
         return
 
-    async def welcomeHandler(self, data):
+    async def welcomeHandler(self, data) -> None:
         self.server = data
         await self.socket.emit('loaded', {'height': 1080, 'scale': 2, 'success': 1, 'width': 1920})
         await self.socket.emit('auth', {'auth': self.userAuth, 'character': self.characterID, 'height': 1080, 'no_graphics': 'True', 'no_html': '1', 'passphrase': '', 'scale': 2, 'user': self.owner, 'width': 1920})
         return
 
-    async def connect(self):
+    async def connect(self) -> bool | None:
         await super().connect(False, False)
 
         self.socket.on('disconnect', self.disconnectHandler)
@@ -346,7 +343,7 @@ class Character(Observer):
 
         return await Character.tryExcept(connectedFn)
 
-    async def disconnect(self):
+    async def disconnect(self) -> None:
         print('Disconnecting!')
 
         if self.socket:
@@ -358,7 +355,7 @@ class Character(Observer):
             Tools.clearTimeout(timer)
         return
 
-    async def requestEntitiesData(self):
+    async def requestEntitiesData(self) -> dict | None:
         print('requestEntitiesData called...')
         if not self.ready:
             raise Exception("We aren't ready yet [requestEntitiesData]")
@@ -380,12 +377,9 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return entitiesData.result()
 
-        res = await Character.tryExcept(entitiesDataFn)
-        if res != None:
-            self.parseEntities(res)
-        return
+        return await Character.tryExcept(entitiesDataFn)
 
-    async def requestPlayerData(self):
+    async def requestPlayerData(self) -> dict | None:
         if not self.ready:
             raise Exception("We aren't ready yet [requestPlayerData]")
 
@@ -408,12 +402,9 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return playerData.result()
 
-        res = await Character.tryExcept(playerDataFn)
-        if res != None:
-            self.parseCharacter(res)
-        return
+        return await Character.tryExcept(playerDataFn)
 
-    async def acceptFriendRequest(self, id: str):
+    async def acceptFriendRequest(self, id: str) -> dict | None:
         if not self.ready:
             raise Exception("We aren't ready yet [acceptFriendRequest].")
 
@@ -445,7 +436,7 @@ class Character(Observer):
 
         return await Character.tryExcept(friendReqFn)
 
-    async def acceptMagiport(self, name: str):
+    async def acceptMagiport(self, name: str) -> dict | None:
         if not self.ready:
             raise Exception("We aren't ready yet [acceptMagiport].")
 
@@ -470,7 +461,7 @@ class Character(Observer):
 
         return await Character.tryExcept(magiportFn)
        
-    async def acceptPartyInvite(self, id: str):
+    async def acceptPartyInvite(self, id: str) -> dict | None:
         if not self.ready:
             raise Exception("We aren't ready yet [acceptPartyInvite].")
 
@@ -511,7 +502,7 @@ class Character(Observer):
 
         return await Character.tryExcept(partyInvFn)
 
-    async def acceptPartyRequest(self, id: str):
+    async def acceptPartyRequest(self, id: str) -> dict | None:
         if not self.ready:
             raise Exception("We aren't ready yet [acceptPartyRequest].")
         
@@ -536,7 +527,7 @@ class Character(Observer):
         
         return await Character.tryExcept(partyReqFn)
 
-    async def basicAttack(self, id: str):
+    async def basicAttack(self, id: str) -> str | None:
         if not self.ready:
             raise Exception("We aren't ready yet [basicAttack].")
         async def attackFn():
@@ -592,7 +583,7 @@ class Character(Observer):
             return attackStarted.result()
         return await Character.tryExcept(attackFn)
 
-    async def buy(self, itemName: str, quantity: int = 1):
+    async def buy(self, itemName: str, quantity: int = 1) -> int | None:
         if not self.ready:
             raise Exception("We aren't ready yet [buy]")
         if self.gold < self.G['items'][itemName]['g']:
@@ -641,7 +632,7 @@ class Character(Observer):
             return itemReceived.result()
         return await Character.tryExcept(buyFn)
 
-    async def buyWithTokens(self, itemName: str):
+    async def buyWithTokens(self, itemName: str) -> None:
         numBefore = self.countItem(itemName)
 
         tokenTypeNeeded = ''
@@ -693,7 +684,7 @@ class Character(Observer):
             return itemReceived.result()
         return await Character.tryExcept(tokenBuyFn)
 
-    async def buyFromMerchant(self, id: str, slot: str, rid: str, quantity: int = 1):
+    async def buyFromMerchant(self, id: str, slot: str, rid: str, quantity: int = 1) -> dict | None:
         if not self.ready:
             raise Exception("We aren't ready yet [buyFromMerchant].")
         if quantity <= 0:
@@ -747,7 +738,7 @@ class Character(Observer):
             return itemBought.result()
         return await Character.tryExcept(merchantBuyFn)
 
-    async def buyFromPonty(self, item: dict):
+    async def buyFromPonty(self, item: dict) -> None:
         if not self.ready:
             raise Exception("We aren't ready yet [buyFromPonty].")
         if not item.get('rid', False):
@@ -813,20 +804,20 @@ class Character(Observer):
         
         return targets
     
-    def calculateDamageRange(self, defender: 'Character' or Entity or Player, skill: str = 'attack') -> list[float]:
+    def calculateDamageRange(self, defender: 'Character' or Entity or Player, skill: str = 'attack') -> list[int]:
         gSkill = self.G['skills'].get(skill, None)
 
         if gSkill == None:
             raise Exception(f"calculateDamageRange ERROR: '{skill}' isn't a skill!?")
 
         if hasattr(defender, 'immune') and (skill != 'attack') and (not (Tools.hasKey(gSkill, 'pierces_immunity'))):
-            return [0.0, 0.0]
+            return [0, 0]
         
         if (hasattr(defender, '1hp')) or (skill == 'taunt'):
             if hasattr(self, 'crit'):
-                return [1.0, 2.0]
+                return [1, 2]
             else:
-                return [1.0, 1.0]
+                return [1, 1]
         
         baseDamage = self.attack
         if Tools.hasKey(gSkill, 'damage'):
@@ -864,6 +855,9 @@ class Character(Observer):
         if skill == 'cleave':
             lowerLimit *= 0.1
             upperLimit *= 0.9
+
+        lowerLimit = math.floor(lowerLimit)
+        upperLimit = math.floor(upperLimit)
         
         return [lowerLimit, upperLimit]
 
@@ -993,7 +987,7 @@ class Character(Observer):
         
         return True
     
-    def canKillInOneShot(self, entity: Entity, skill: str = 'attack'):
+    def canKillInOneShot(self, entity: Entity, skill: str = 'attack') -> bool:
         if Tools.hasKey(entity, 'lifesteal'):
             return False
         if Tools.hasKey(entity, 'abilities') and Tools.hasKey(entity['abilities'], 'self_healing'):
@@ -1010,5 +1004,77 @@ class Character(Observer):
         
         return self.calculateDamageRange(entity, skill)[0] >= entity.hp
     
-    def canSell(self):
-        pass
+    def canSell(self) -> bool:
+        if (self.map in ['bank', 'bank_b', 'bank_u']):
+            return False # can't sell in the bank
+        if (self.hasItem('computer')) or (self.hasItem('supercomputer')):
+            return True # we can sell anywhere with a computer
+        
+        for npc in self.G['maps'][self.map]['npcs']:
+            gNPC = self.G['npcs'][npc['id']]
+            if not Tools.hasKey(gNPC, 'items'):
+                continue # NPC is not a merchant
+            if Tools.distance(self, { 'map': self.map, 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.NPC_INTERACTION_DISTANCE:
+                continue # Too far away
+
+            return True
+        
+        return False
+    
+    def canUpgrade(self, itemPos: int, scrollPos: int, offeringPos: int = -1) -> bool:
+        if self.map in ['bank', 'bank_b', 'bank_u']:
+            return False # Can't upgrade in the bank
+        if itemPos < 0 or itemPos > 42:
+            raise Exception('Invalid itemPos value')
+        if scrollPos < 0 or scrollPos > 42:
+            raise Exception('Invalid scrollPos value')
+        if itemPos == scrollPos:
+            raise Exception('Invalid itemPos & scrollPos values; cannot be equivalent')
+        
+        itemInfo = self.items[itemPos]
+        if itemInfo == None:
+            raise Exception(f"No item in inventory position '{itemPos}'.")
+        gItemInfo = self.G['items'][itemInfo['name']]
+        if not Tools.hasKey(gItemInfo, 'upgrade'):
+            return False # Item is not upgradable
+        scrollInfo = self.items[scrollPos]
+        if scrollInfo == None:
+            raise Exception(f"No scroll in inventory position '{scrollPos}'.")
+        gScrollInfo = self.G['items'][scrollInfo['name']]
+        if gScrollInfo['type'] != 'uscroll':
+            raise Exception("Scroll is compound, not upgrade.")
+        offerringInfo = None
+        if offeringPos >= 0:
+            offerringInfo = self.items[offeringPos]
+        
+        if (not self.hasItem('computer')) and (not self.hasItem('supercomputer')) and (Tools.distance(self, {'map': 'main', 'x': self.G['maps']['main']['ref']['u_mid'][0], 'y': self.G['maps']['main']['ref']['u_mid'][1]}) > Constants.NPC_INTERACTION_DISTANCE):
+            return False # No computer; too far away
+        
+        scrollLevel = gScrollInfo['grade']
+        itemGrade = self.calculateItemGrade(itemInfo)
+        if scrollLevel < itemGrade:
+            return False # Scroll can't be used on this grade of item
+
+        # TODO: offering compatibility check
+        
+        return True
+
+    def canUse(self, skill: str, *, ignoreCooldown: bool = False, ignoreEquipped: bool = False) -> bool:
+        if self.rip:
+            return False # We're dead lol
+        for conditionName in self.s:
+            gCondition = self.G['conditions'][conditionName]
+            if Tools.hasKey(gCondition, 'blocked'):
+                return False # We have a skill-preventing condition
+            if (self.isOnCooldown(skill)) and (not ignoreCooldown):
+                return False # Skill is on cooldown
+            gInfoSkill = self.G['skills'][skill]
+            if (Tools.hasKey(gInfoSkill, 'hostile')) and (Tools.hasKey(self.G['maps'][self.map], 'safe')):
+                return False # can't use hostile skills in a safe zone
+            if Tools.hasKey(gInfoSkill, 'mp') and self.mp < gInfoSkill['mp']:
+                return False # Not enough mp
+            if skill == 'attack' and self.mp < self.mp_cost:
+                return False # Not enough mp (attack)
+            if Tools.hasKey(gInfoSkill, 'level') and self.level < gInfoSkill['level']:
+                return False # Not high enough level to use skill
+            return True
