@@ -36,12 +36,12 @@ class Character(Observer):
 
     async def updateLoop(self) -> None:
         if (not bool(self.socket)) or (not self.socket.connected) or (not self.ready):
-            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoopFn, Constants.UPDATE_POSITIONS_EVERY_S)
+            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S)
             return
 
         if (not hasattr(self, 'lastPositionUpdate')):
             self.updatePositions()
-            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoopFn, Constants.UPDATE_POSITIONS_EVERY_M)
+            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S)
             return
 
         if (hasattr(self, 'lastAllEntities')) and (((datetime.now() - self.lastAllEntities).total_seconds()) > Constants.STALE_MONSTER_S):
@@ -50,10 +50,10 @@ class Character(Observer):
         msSinceLastUpdate = ((datetime.now() - self.lastPositionUpdate).total_seconds())
         if msSinceLastUpdate > Constants.UPDATE_POSITIONS_EVERY_S:
             self.updatePositions()
-            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoopFn, Constants.UPDATE_POSITIONS_EVERY_S)
+            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S)
             return
         else:
-            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoopFn, Constants.UPDATE_POSITIONS_EVERY_S - msSinceLastUpdate)
+            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S - msSinceLastUpdate)
             return
 
     def parseCharacter(self, data) -> None:
@@ -1066,15 +1066,86 @@ class Character(Observer):
             gCondition = self.G['conditions'][conditionName]
             if Tools.hasKey(gCondition, 'blocked'):
                 return False # We have a skill-preventing condition
-            if (self.isOnCooldown(skill)) and (not ignoreCooldown):
-                return False # Skill is on cooldown
-            gInfoSkill = self.G['skills'][skill]
-            if (Tools.hasKey(gInfoSkill, 'hostile')) and (Tools.hasKey(self.G['maps'][self.map], 'safe')):
-                return False # can't use hostile skills in a safe zone
-            if Tools.hasKey(gInfoSkill, 'mp') and self.mp < gInfoSkill['mp']:
-                return False # Not enough mp
-            if skill == 'attack' and self.mp < self.mp_cost:
-                return False # Not enough mp (attack)
-            if Tools.hasKey(gInfoSkill, 'level') and self.level < gInfoSkill['level']:
+        if (self.isOnCooldown(skill)) and (not ignoreCooldown):
+            return False # Skill is on cooldown
+        gInfoSkill = self.G['skills'][skill]
+        if (Tools.hasKey(gInfoSkill, 'hostile')) and (Tools.hasKey(self.G['maps'][self.map], 'safe')):
+            return False # can't use hostile skills in a safe zone
+        if Tools.hasKey(gInfoSkill, 'mp') and self.mp < gInfoSkill['mp']:
+            return False # Not enough mp
+        if skill == 'attack' and self.mp < self.mp_cost:
+            return False # Not enough mp (attack)
+        if Tools.hasKey(gInfoSkill, 'level') and self.level < gInfoSkill['level']:
                 return False # Not high enough level to use skill
-            return True
+        if Tools.hasKey(gInfoSkill, 'wtype') and (not ignoreEquipped):
+            if self.slots['mainhand'] == None:
+                return False # We don't have any weapon equipped
+            gInfoWeapon = self.G['items'][self.slots['mainhand']['name']]
+            if type(gInfoSkill['wtype']) == list:
+                if gInfoWeapon['wtype'] not in gInfoSkill['wtype']:
+                    return False
+            elif gInfoWeapon['wtype'] != gInfoSkill['wtype']:
+                return False
+        if Tools.hasKey(gInfoSkill, 'consume') and (not ignoreEquipped):
+            if not self.hasItem(gInfoSkill['consume']):
+                return False
+        if Tools.hasKey(gInfoSkill, 'inventory') and (not ignoreEquipped):
+            for item in gInfoSkill['inventory']:
+                if not self.hasItem(item):
+                    return False
+        if Tools.hasKey(gInfoSkill, 'slot') and (not ignoreEquipped):
+            hasSlot = False
+            for (slot, item) in gInfoSkill['slot'].items():
+                if self.slots[slot] != None and self.slots[slot]['name'] == item:
+                    hasSlot = True
+                    break
+            if not hasSlot:
+                return False # We don't have anything equipped that lets us use this skill
+        if Tools.hasKey(gInfoSkill, 'class'):
+            if self.ctype not in gInfoSkill['class']:
+                return False
+        if Tools.hasKey(gInfoSkill, 'requirements'):
+            for s in gInfoSkill['requirements'].keys():
+                if getattr(self, s) < gInfoSkill['requirements'][s]:
+                    return False
+        if Tools.hasKey(self.s, 'dampened') and skill == 'blink':
+            return False
+        if self.ctype == 'merchant' and skill == 'attack':
+            if self.slots['mainhand'] == None:
+                return False
+            if self.slots['mainhand']['name'] != 'dartgun':
+                return False
+            if self.gold < 100:
+                return False
+        return True
+
+    async def closeMerchantStand(self):
+        if not self.ready:
+            raise Exception("We aren't ready yet [closeMerchantStand].")
+        if not hasattr(self, 'stand'):
+            return # It's already closed
+        
+        async def closeFn():
+            closed = asyncio.get_event_loop().create_future()
+            def reject(reason):
+                if not closed.done():
+                    self.socket.on('player', self.playerHandler)
+                    closed.set_exception(Exception(reason))
+            def resolve(value):
+                if not closed.done():
+                    self.socket.on('player', self.playerHandler)
+                    closed.set_result(value)
+            def checkStand(data):
+                self.playerHandler(data)
+                if not Tools.hasKey(data, 'stand'):
+                    resolve(None)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'closeMerchantStand timeout ({Constants.TIMEOUT}s)')
+            self.socket.on('player', checkStand)
+            await self.socket.emit('merchant', {'close': 1})
+            while not closed.done():
+                await asyncio.sleep(Constants.WAIT)
+            return closed.result()
+        return await Character.tryExcept(closeFn)
+
+    async def compound(self, item1Pos: int, item2Pos: int, item3Pos: int, cscrollPos: int, offeringPos: int = None) -> bool | None:
+        pass

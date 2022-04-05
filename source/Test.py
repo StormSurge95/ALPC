@@ -19,6 +19,7 @@ async def main():
         await Game.getGData(session, True, True)
         #await Game.startObserver(session, 'US', 'III')
         char = await Game.startCharacter(session, 'StormSurge', 'US', 'III')
+        print(char.slots)
         # print('armorring?')
         # char.canCraft('armorring')
         # print('basketofeggs?')
@@ -27,7 +28,7 @@ async def main():
         # char.canCraft('pickaxe', True)
         # print('computer?')
         # char.canCraft('computer', True)
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
         #await char.disconnect()
     print('Test Complete')
 
