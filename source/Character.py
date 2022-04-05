@@ -1,3 +1,4 @@
+from types import NoneType
 from Observer import Observer
 from Player import Player
 from Entity import Entity
@@ -1148,4 +1149,79 @@ class Character(Observer):
         return await Character.tryExcept(closeFn)
 
     async def compound(self, item1Pos: int, item2Pos: int, item3Pos: int, cscrollPos: int, offeringPos: int = None) -> bool | None:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [compound].")
+        item1Info = self.items[item1Pos]
+        item2Info = self.items[item2Pos]
+        item3Info = self.items[item3Pos]
+        cscrollInfo = self.items[cscrollPos]
+        if item1Info == None:
+            raise Exception(f"There is no item in inventory slot {item1Pos} (item1).")
+        if item2Info == None:
+            raise Exception(f"There is no item in inventory slot {item2Pos} (item2).")
+        if item3Info == None:
+            raise Exception(f"There is no item in inventory slot {item3Pos} (item3).")
+        if cscrollInfo == None:
+            raise Exception(f"There is no item in inventory slot {cscrollPos} (cscroll).")
+        if offeringPos != None:
+            offeringInfo = self.items[offeringPos]
+            if offeringInfo == None:
+                raise Exception(f"There is no item in inventory slot {offeringPos} (offering).")
+        if not ((item1Info['name'] == item2Info['name']) and (item1Info['name'] == item3Info['name'])):
+            raise Exception("You can only combine 3 of the same items.")
+        if not ((item1Info['level'] == item2Info['level']) and (item1Info['level'] == item3Info['level'])):
+            raise Exception("You can only combine 3 items of the same level.")
+        
+        async def compoundFn():
+            compoundComplete = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not compoundComplete.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('player', self.playerHandler)
+                    compoundComplete.set_exception(Exception(reason))
+                return
+            def resolve(value = None):
+                if not compoundComplete.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('player', self.playerHandler)
+                    compoundComplete.set_result(value)
+                return
+            def playerCheck(data):
+                if not Tools.hasKey(data, 'hitchhikers'):
+                    return
+                for [event, datum] in data['hitchhikers'].items():
+                    if event == 'game_response' and datum['response'] == 'compound_fail':
+                        resolve(False)
+                        break
+                    elif event == 'game_response' and datum['response'] == 'compound_success':
+                        resolve(True)
+                        break
+                return
+            def gameResponseCheck(data):
+                if type(data) == dict:
+                    if data['response'] == 'bank_restrictions' and data['place'] == 'compound':
+                        reject("You can't compound items in the gank.")
+                elif type(data) == str:
+                    if data == 'compound_no_item':
+                        reject()
+            Tools.setTimeout(reject, 60, "compound timeout (60s)")
+            self.socket.on('game_response', gameResponseCheck)
+            self.socket.on('player', playerCheck)
+            if offeringPos == None:
+                await self.socket.emit('compound', { 'clevel': item1Info['level'], 'items': [item1Pos, item2Pos, item3Pos], 'scroll_num': cscrollPos })
+            else:
+                await self.socket.emit('compound', { 'clevel': item1Info['level'], 'items': [item1Pos, item2Pos, item3Pos], 'offering_num': offeringPos, 'scroll_num': cscrollPos })
+            while not compoundComplete.done():
+                await asyncio.sleep(Constants.WAIT)
+            return compoundComplete.result()
+        
+        return await Character.tryExcept(compoundFn)
+
+    async def craft(self, item: str) -> None:
+        if not self.ready:
+            raise Exception("We aren't ready yet [craft].")
+        gInfo = self.G['craft'].get(item, None)
+        if gInfo == None:
+            raise Exception(f"Can't find a recipe for {item}.")
+        if gInfo['cose'] > self.gold:
+            raise Exception(f"We don't have enough gold to craft {item}.")
