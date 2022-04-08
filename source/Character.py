@@ -1373,13 +1373,96 @@ class Character(Observer):
             while not swapped.done():
                 await asyncio.sleep(Constants.WAIT)
             return swapped.result()
-        return self.tryExcept(swapFn)
+        return await Character.tryExcept(swapFn)
 
     async def emote(self, emotionName) -> None:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [emote].")
+        if not Tools.hasKey(self.emx, emotionName):
+            raise Exception(f"We don't have the emotion '{emotionName}'")
+        
+        async def emoteFn():
+            emoted = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not emoted.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('emotion', self.defaultHandler)
+                    emoted.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not emoted.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('emotion', self.defaultHandler)
+                    emoted.set_result(value)
+            def failCheck(data):
+                if type(data) == str:
+                    if data == 'emotion_cooldown':
+                        reject('Emotion is on cooldown?')
+                    elif data == 'emotion_cant':
+                        reject('Emotion is...blocked..?')
+                self.gameResponseHandler(data)
+            def successCheck(data):
+                if data['name'] == emotionName and data['player'] == self.id:
+                    resolve()
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'emote timeout ({Constants.TIMEOUT}s)')
+            self.socket.on('game_response', failCheck)
+            self.socket.on('emotion', successCheck)
+            await self.socket.emit('emotion', { 'name': emotionName })
+            while not emoted.done():
+                await asyncio.sleep(Constants.WAIT)
+            return emoted.result()
+        return await Character.tryExcept(emoteFn)
 
     async def enter(self, map: str, instance: str = None):
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [enter].")
+
+        found = False
+        distance = sys.maxsize
+        for d in self.G['maps'][self.map]['doors']:
+            if d[4] != map:
+                continue
+            found = True
+            distance = Pathfinder.doorDistance(self, d)
+            if distance > Constants.DOOR_REACH_DISTANCE:
+                continue
+            break
+        if not found:
+            raise Exception(f"There is no door to {map} from {self.map}.")
+        if distance > Constants.DOOR_REACH_DISTANCE:
+            raise Exception(f"We're too far ({distance}) from the door to {map}.")
+
+        async def enterFn():
+            enterComplete = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not enterComplete.done():
+                    self.socket.on('new_map', self.newMapHandler)
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    enterComplete.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not enterComplete.done():
+                    self.socket.on('new_map', self.newMapHandler)
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    enterComplete.set_result(value)
+            def enterCheck(data):
+                if data['name'] == map:
+                    resolve()
+                else:
+                    reject(f"We are not in {data['name']}, but we should be in {map}.")
+                self.newMapHandler(data)
+            def failCheck(data):
+                if type(data) == str:
+                    if data == 'transport_cant_item':
+                        reject(f"We don't have the required item to enter {map}.")
+                self.gameResponseHandler(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"We don't have the required item to enter {map}.")
+            self.socket.on('new_map', enterCheck)
+            self.socket.on('game_response', failCheck)
+            await self.socket.emit('enter', { 'name': instance, 'place': map })
+            while not enterComplete.done():
+                await asyncio.sleep(Constants.WAIT)
+            return enterComplete.result()
+        
+        return await Character.tryExcept(enterFn)
 
     async def equip(self, inventoryPos: int, equipSlot: int = None) -> None:
         pass
