@@ -1,4 +1,3 @@
-from types import NoneType
 from Observer import Observer
 from Player import Player
 from Entity import Entity
@@ -10,8 +9,6 @@ import logging
 import re
 import sys
 import math
-
-
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(sys.stdout)
@@ -1225,3 +1222,329 @@ class Character(Observer):
             raise Exception(f"Can't find a recipe for {item}.")
         if gInfo['cose'] > self.gold:
             raise Exception(f"We don't have enough gold to craft {item}.")
+
+        itemPositions = []
+        for i in range(0, len(gInfo['items'])):
+            requiredQuantity = gInfo['items'][i][0]
+            requiredName = gInfo['items'][i][1]
+            fixedItemLevel = None
+            if len(gInfo['items'][i]) == 3:
+                fixedItemLevel = gInfo['items'][i][2]
+            if fixedItemLevel == None:
+                gInfo = self.G['items'][requiredName]
+                if Tools.hasKey(gInfo, 'upgrade') or Tools.hasKey(gInfo, 'compound'):
+                    fixedItemLevel = 0
+            
+            # TODO: searchArgs
+            searchArgs = {}
+
+            itemPos = self.locateItem(requiredName, self.items, searchArgs)
+            if itemPos == None:
+                raise Exception(f"We don't have {requiredQuantity} {requiredName} to craft {item}.")
+            
+            itemPositions.append([i, itemPos])
+
+        async def craftedFn():
+                crafted = asyncio.get_event_loop().create_future()
+                def reject(reason):
+                    if not crafted.done():
+                        self.socket.on('game_response', self.gameResponseHandler)
+                        crafted.set_exception(Exception(reason))
+                def resolve(value = None):
+                    if not crafted.done():
+                        self.socket.on('game_response', self.gameResponseHandler)
+                        crafted.set_result(value)
+                def successCheck(data):
+                    self.gameResponseHandler(data)
+                    if type(data) == dict:
+                        if data['response'] == 'craft' and data['name'] == item:
+                            resolve()
+                Tools.setTimeout(reject, Constants.TIMEOUT, f"craft timeout ({Constants.TIMEOUT}s)")
+                self.socket.on('game_response', successCheck)
+                await self.socket.emit('craft', { 'items': itemPositions })
+                while not crafted.done():
+                    await asyncio.sleep(Constants.WAIT)
+                return crafted.result()
+            
+        return await Character.tryExcept(craftedFn)
+
+    async def depositGold(self, gold: int) -> None:
+        if not self.ready:
+            raise Exception("We aren't ready yet [depositGold].")
+        if self.map != 'bank':
+            raise Exception("We need to be in 'bank' to deposit gold.")
+        if gold <= 0:
+            raise Exception("We can't deposit 0 or less gold")
+        
+        if gold > self.gold:
+            print(f"We only have {self.gold} gold, so we're depositing that instead of {gold}.")
+            gold = self.gold
+        
+        await self.socket.emit('bank', { 'amount': gold, 'operation': 'deposit' })
+    
+    async def depositItem(self, inventoryPos: int, bankPack: str = None, bankSlot: int = -1) -> None:
+        if not self.ready:
+            raise Exception("We aren't ready yet [depositItem].")
+        if self.map not in ['bank', 'bank_b', 'bank_u']:
+            raise Exception(f"We're not in the bank (we're in '{self.map}')")
+
+        for i in range(0, 20):
+            if self.bank:
+                break
+            await asyncio.sleep(250)
+        if not self.bank:
+            raise Exception("We don't have bank information yet. Please try again in a bit.")
+        
+        item = self.items[inventoryPos]
+        if item == None:
+            raise Exception(f"There is no item in inventory slot {inventoryPos}.")
+
+        if bankPack:
+            bankPackNum = int(bankPack[5:7])
+            if (self.map == 'bank' and (bankPackNum < 0 or bankPackNum > 7)) or (self.map == 'bank_b' and (bankPackNum < 8 or bankPackNum > 23)) or (self.map == 'bank_u' and (bankPackNum < 24 or bankPackNum > 47)):
+                raise Exception(f"We can not access {bankPack} on {self.map}.")
+        else:
+            bankSlot = None
+            packFrom = None
+            packTo = None
+            if self.map == 'bank':
+                packFrom = 0
+                packTo = 7
+            elif self.map == 'bank_b':
+                packFrom = 8
+                packTo = 23
+            elif self.map == 'bank_u':
+                packFrom = 24
+                packTo = 47
+            
+            numStackable = self.G['items'][item['name']].get('s', None)
+
+            emptyPack = None
+            emptySlot = None
+            for packNum in range(packFrom, packTo):
+                packName = f'items{packNum}'
+                pack = self.bank.get(packName, None)
+                if not pack:
+                    continue
+                for slotNum in range(0, len(pack)):
+                    slot = pack[slotNum]
+                    if slot == None:
+                        if numStackable == None:
+                            bankPack = packName
+                            bankSlot = slotNum
+                        elif emptyPack == None and emptySlot == None:
+                            emptyPack = packName
+                            emptySlot = slotNum
+                    elif numStackable != None and slot['name'] == item['name'] and (slot['q'] + item['q'] <= numStackable):
+                        bankPack = packName
+                        bankSlot = -1
+                        break
+                if bankPack != None and bankSlot != None:
+                    break
+            if bankPack == None and bankSlot == None and emptyPack != None and emptySlot != None:
+                bankPack = emptyPack
+                bankSlot = emptySlot
+            elif bankPack == None and bankSlot == None and emptyPack == None and emptySlot == None:
+                raise Exception(f"Bank if sull. There is nowhere to place {item['name']}")
+        
+        bankItemCount = self.countItem(item['name'], self.bank[bankPack])
+        async def swapFn():
+            swapped = asyncio.get_event_loop().create_future()
+            def reject(reason):
+                if not swapped.done():
+                    self.socket.on('player', self.playerHandler)
+                    swapped.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not swapped.done():
+                    self.socket.on('player', self.playerHandler)
+                    swapped.set_result(value)
+            def checkDeposit(data):
+                if Tools.hasKey(data, 'user'):
+                    if data['map'] not in ['bank', 'bank_b', 'bank_u']:
+                        reject(f"We're not in the bank (we're in '{data['map']}')")
+                    else:
+                        newBankItemCount = self.countItem(item['name'], data['user'][bankPack])
+                        if ((Tools.hasKey(item, 'q') and newBankItemCount == (bankItemCount + item['q'])) or (not Tools.hasKey(item, 'q') and newBankItemCount == (bankItemCount +1))):
+                            resolve()
+                self.playerHandler(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'depositItem timeout ({Constants.TIMEOUT}s)')
+            self.socket.on('player', checkDeposit)
+            await self.socket.emit('bank', { 'inv': inventoryPos, 'operation': 'swap', 'pack': bankPack, 'str': bankSlot })
+            while not swapped.done():
+                await asyncio.sleep(Constants.WAIT)
+            return swapped.result()
+        return self.tryExcept(swapFn)
+
+    async def emote(self, emotionName) -> None:
+        pass
+
+    async def enter(self, map: str, instance: str = None):
+        pass
+
+    async def equip(self, inventoryPos: int, equipSlot: int = None) -> None:
+        pass
+
+    async def exchange(self, inventoryPos: int) -> None:
+        pass
+
+    async def finishMonsterHuntQuest(self):
+        pass
+
+    def getEntities(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None) -> list[Entity]:
+        pass
+
+    def getEntity(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None, returnHighestHP: bool = None, returnLowestHP: bool = None, returnNearest: bool = None) -> Entity:
+        pass
+
+    def getFirstEmptyInventorySlot(self, items: dict = None) -> int:
+        if items == None:
+            items = self.items
+        pass
+
+    def getMonsterHuntQuest(self) -> None:
+        pass
+
+    async def getPlayers(self) -> dict:
+        pass
+
+    async def getPontyItems(self) -> list[dict]:
+        pass
+
+    def getTargetEntity(self) -> Entity:
+        return self.entities.get(self.target)
+
+    async def getTracketData(self) -> dict:
+        pass
+
+    def isFull(self) -> bool:
+        return self.esize == 0
+
+    def isScared(self) -> bool:
+        return self.fear > 0
+
+    async def kickPartyMember(self, toKick: str) -> None:
+        pass
+
+    async def leaveMap(self) -> None:
+        pass
+
+    async def leaveParty(self) -> None:
+        pass
+
+    async def move(self, x: int, y: int, *, disableSafetyCheck: bool = False, resolveOnStart: bool = False) -> dict[str, int|str]:
+        pass
+
+    async def openChest(self, id: str) -> dict:
+        pass
+
+    async def openMerchantStand(self) -> None:
+        pass
+
+    async def regenHP(self) -> None:
+        pass
+
+    async def regenMP(self) -> None:
+        pass
+
+    async def scare(self) -> list[str]:
+        pass
+
+    async def sell(self, itemPos: int, quantity: int = 1) -> bool:
+        pass
+
+    async def sellToMerchant(self, id: str, slot: str, rid: str, q: int) -> None:
+        pass
+
+    async def sendCM(self, to: list[str], message: str) -> None:
+        pass
+
+    async def sendMail(self, to: str, subject: str, message: str, item: bool = False) -> None:
+        pass
+
+    async def sendPM(self, to: str, message: str) -> bool:
+        pass
+
+    async def say(self, message: str) -> None:
+        pass
+
+    async def sendFriendRequest(self, id: str) -> None:
+        pass
+
+    async def sendGold(self, to: str, amound: int) -> int:
+        pass
+
+    async def sendItem(self, to: str, inventoryPos: int, quantity: int = 1) -> None:
+        pass
+
+    async def sendPartyInvite(self, id: str) -> None:
+        pass
+
+    async def sendPartyRequest(self, id: str) -> None:
+        pass
+
+    async def shiftBooster(booster: int, to: str) -> None:
+        pass
+
+    lastSmartMove = datetime.now()
+    smartMoving = None
+    async def smartMove(self, to, *, avoidTownWarps: bool = None, getWithin: int = None, useBlink: bool = None, costs: dict[str, int] = { 'enter': None, 'town': None, 'transport': None }) -> dict[str, int | str]:
+        pass
+
+    async def startKonami(self) -> str:
+        pass
+
+    async def stopSmartMove(self) -> dict[str, int|str]:
+        pass
+
+    async def stopWarpToTown(self) -> None:
+        pass
+
+    async def swapItems(self, itemPosA: int, itemPosB: int) -> None:
+        pass
+
+    async def takeMailItem(self, mailID: str) -> None:
+        pass
+
+    async def throwSnowball(self, target: str, snowball: int = None) -> str:
+        if snowball == None:
+            snowball = self.locateItem('snowball')
+        pass
+
+    async def transport(self, map: str, spawn: int):
+        pass
+
+    async def unequip(self, slot: str):
+        pass
+
+    async def unfriend(self, id: str):
+        pass
+
+    async def upgrade(self, itemPos: int, scrollPos: int, offerPos: int = None):
+        pass
+
+    async def useHPPot(self, itemPos: int):
+        pass
+
+    async def useMPPot(self, itemPos: int):
+        pass
+
+    async def warpToJail(self):
+        pass
+
+    async def warpToTown(self):
+        pass
+
+    async def withdrawGold(self, gold: int):
+        pass
+
+    async def withdrawItem(self, bankPack: str, bankPos: int, inventoryPos: int = -1):
+        pass
+
+    async def zapperZap(self, id: str):
+        pass
+
+    def couldDieToProjectiles(self):
+        pass
+
+    def countItem(self, item: str, inventory: dict = None, filters: dict = {}):
+        pass
