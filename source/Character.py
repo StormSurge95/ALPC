@@ -1508,7 +1508,53 @@ class Character(Observer):
         return await Character.tryExcept(equipFn)
 
     async def exchange(self, inventoryPos: int) -> None:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [exchange].")
+        if self.items[inventoryPos] == None:
+            raise Exception(f"No item in inventory slot {inventoryPos}.")
+        if Tools.hasKey(self.G['maps'][self.map], 'mount'):
+            raise Exception("We can't exchange things in the bank.")
+        
+        async def exchangeFn():
+            global startedExchange 
+            startedExchange = False
+            if Tools.hasKey(self.q, 'exchange'):
+                startedExchange = True
+            exchangeFinished = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not exchangeFinished.done():
+                    self.socket.on('player', self.playerHandler)
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    exchangeFinished.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not exchangeFinished.done():
+                    self.socket.on('player', self.playerHandler)
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    exchangeFinished.set_result(value)
+            def completeCheck(data):
+                if (not startedExchange) and Tools.hasKey(data['q'], 'exchange'):
+                    startedExchange = True
+                    return
+                if startedExchange and not Tools.hasKey(data['q'], 'exchange'):
+                    resolve()
+            def bankCheck(data):
+                if type(data) == dict and data['response'] == 'bank_restrictions' and data['place'] == 'upgrade':
+                    reject("You can't exchange items in the bank.")
+                elif type(data) == str:
+                    if data == 'exchange_notenough':
+                        reject("We don't have enough items to exchange.")
+                    elif data == 'exchange_existing':
+                        reject("We are already exchanging something.")
+            Tools.setTimeout(reject, 60, "exchange timeout (60s)")
+            self.socket.on('player', completeCheck)
+            self.socket.on('game_response', bankCheck)
+            q = self.items[inventoryPos]['q'] if Tools.hasKey(self.items[inventoryPos], 'q') else None
+            await self.socket.emit('exchange', { 'item_num': inventoryPos, 'q': q })
+            while not exchangeFinished.done():
+                await asyncio.sleep(Constants.WAIT)
+            return exchangeFinished.result()
+        
+        return await Character.tryExcept(exchangeFn)
 
     async def finishMonsterHuntQuest(self):
         pass
@@ -1519,7 +1565,7 @@ class Character(Observer):
     def getEntity(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None, returnHighestHP: bool = None, returnLowestHP: bool = None, returnNearest: bool = None) -> Entity:
         pass
 
-    def getFirstEmptyInventorySlot(self, items: dict = None) -> int:
+    def getFirstEmptyInventorySlot(self, items = None) -> int:
         if items == None:
             items = self.items
         pass
@@ -1536,7 +1582,7 @@ class Character(Observer):
     def getTargetEntity(self) -> Entity:
         return self.entities.get(self.target)
 
-    async def getTracketData(self) -> dict:
+    async def getTrackerData(self) -> dict:
         pass
 
     def isFull(self) -> bool:
