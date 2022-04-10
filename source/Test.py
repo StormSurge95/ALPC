@@ -1,9 +1,10 @@
 from Game import Game
+from Pathfinder import Pathfinder
 #from database.Database import Database
-from Tools import Tools
+#from Tools import Tools
 import asyncio
 import aiohttp
-import ujson
+#import ujson
 import logging
 import sys
 
@@ -17,9 +18,12 @@ async def main():
     async with aiohttp.ClientSession() as session:
         await Game.loginJSONFile(session, '..\credentials.json')
         await Game.getGData(session, True, True)
+        await Pathfinder.prepare(Game.G)
+        print(Pathfinder.getPath({'map': 'main', 'x': 0, 'y': 0}, {'map': 'halloween', 'x': 0, 'y': 0}))
         #await Game.startObserver(session, 'US', 'III')
-        char = await Game.startCharacter(session, 'StormSurge', 'US', 'III')
-        print(char.slots)
+        #char = await Game.startCharacter(session, 'StormSurge', 'US', 'III')
+        #await asyncio.sleep(5)
+        #await char.enter('bank')
         # print('armorring?')
         # char.canCraft('armorring')
         # print('basketofeggs?')

@@ -1,12 +1,10 @@
 import asyncio
 import aiohttp
 import ujson
-import typing
 import re
 import logging
 import logging.config
 import sys
-from Tools import Tools
 from Observer import Observer
 from Character import Character
 

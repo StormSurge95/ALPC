@@ -11,22 +11,34 @@ class Tools:
     def distance(a, b):
         if (a is None) or (b is None):
             return sys.maxsize
-        if type(a) != dict and type(b) != dict:
-            if (hasattr(a, 'map') and hasattr(b, 'map')) and (getattr(a, 'map') != getattr(b, 'map')):
-                return sys.maxsize
-            return math.hypot(getattr(a, 'x') - getattr(b, 'x'), getattr(a, 'y') - getattr(b, 'y'))
-        elif type(a) != dict and type(b) == dict:
-            if (hasattr(a, 'map') and b.get('map', False)) and (getattr(a, 'map') != b['map']):
-                return sys.maxsize
-            return math.hypot(getattr(a, 'x') - b['x'], getattr(a, 'y') - b['y'])
-        elif type(a) == dict and type(b) != dict:
-            if (a.get('map', False) and hasattr(b, 'map')) and (a['map'] != getattr(b, 'map')):
-                return sys.maxsize
-            return math.hypot(a['x'] - getattr(b, 'x'), a['y'] - getattr(b, 'y'))
-        else:
-            if (a.get('map', False) and b.get('map', False)) and a['map'] != b['map']:
-                return sys.maxsize
-            return math.hypot(a['x'] - b['x'], a['y'] - b['y'])
+        mapA = getattr(a, 'map', None)
+        if mapA == None:
+            try:
+                mapA = a['map']
+            except Exception:
+                mapA = None
+        xA = getattr(a, 'x', None)
+        if xA == None:
+            xA = a['x']
+        yA = getattr(a, 'y', None)
+        if yA == None:
+            yA = a['y']
+        mapB = getattr(b, 'y', None)
+        if mapB == None:
+            try:
+                mapB = b['map']
+            except Exception:
+                mapB = None
+        xB = getattr(b, 'x', None)
+        if xB == None:
+            xB = b['x']
+        yB = getattr(b, 'y', None)
+        if yB == None:
+            yB = b['y']
+        
+        if (mapA != None) and (mapB != None) and (mapA != mapB):
+            return sys.maxsize
+        return math.hypot(xA - xB, yA - yB)
 
     @staticmethod
     def setTimeout(fn, delay, *args, **kwargs):

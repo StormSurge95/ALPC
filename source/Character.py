@@ -3,6 +3,7 @@ from Player import Player
 from Entity import Entity
 from Tools import Tools
 from Constants import Constants
+from Pathfinder import Pathfinder
 from datetime import datetime
 import asyncio
 import logging
@@ -1464,8 +1465,47 @@ class Character(Observer):
         
         return await Character.tryExcept(enterFn)
 
-    async def equip(self, inventoryPos: int, equipSlot: int = None) -> None:
-        pass
+    async def equip(self, inventoryPos, equipSlot = None) -> None:
+        if not self.ready:
+            raise Exception("We aren't ready yet [equip].")
+        if self.items[inventoryPos] == None:
+            raise Exception(f"No item in inventory slot {inventoryPos}.")
+        
+        iInfo = self.items[inventoryPos]
+        async def equipFn():
+            equipFinished = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not equipFinished.done():
+                    self.socket.on('player', self.playerHandler)
+                    self.socket.on('disappearing_text', self.defaultHandler)
+                    equipFinished.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not equipFinished.done():
+                    self.socket.on('player', self.playerHandler)
+                    self.socket.on('disappearing_text', self.defaultHandler)
+                    equipFinished.set_result(value)
+            def equipCheck(data):
+                if equipSlot != None:
+                    item = data['slots'][equipSlot]
+                    if (item != None) and (item['name'] == iInfo['name']) and (item['level'] == iInfo['level']) and (item['p'] == iInfo['p']):
+                        resolve()
+                else:
+                    for slot in data['slots'].keys():
+                        item = data['slots'][slot]
+                        if (item != None) and (item['name'] == iInfo['name']):
+                            resolve()
+            def cantEquipCheck(data):
+                if data['id'] == self.id and data['message'] == "CAN'T EQUIP":
+                    reject(f"Can't equip '{inventoryPos}' ({iInfo['name']})")
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"equip timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('player', equipCheck)
+            self.socket.on('disappearing_text', cantEquipCheck)
+            await self.socket.emit('equip', { 'num': inventoryPos, 'slot': equipSlot })
+            while not equipFinished.done():
+                await asyncio.sleep(Constants.WAIT)
+            return equipFinished.result()
+        
+        return await Character.tryExcept(equipFn)
 
     async def exchange(self, inventoryPos: int) -> None:
         pass
