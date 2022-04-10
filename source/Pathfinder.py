@@ -40,14 +40,10 @@ class Pathfinder:
     
     @staticmethod
     def addNodeToGraph(_map: str, _x: int, _y: int):
-        name = f"{_map}:{_x},{_y}"
         try:
-            check = Pathfinder.graph.vs.select(name_eq=name)[0]
+            return Pathfinder.graph.vs.find(name_eq=f"{_map}:{_x},{_y}")
         except Exception:
-            check = None
-        if check != None:
-            return check
-        return Pathfinder.graph.add_vertex(name, map=_map, x=_x, y=_y)
+            return Pathfinder.graph.add_vertex(f"{_map}:{_x},{_y}", map=_map, x=_x, y=_y)
 
     @staticmethod
     def canStand(location: dict) -> bool:
@@ -150,29 +146,39 @@ class Pathfinder:
     
     @staticmethod
     def computeLinkCost(fr, to, link, *, avoidTownWarps: bool = None, costs: dict[str, int] = {}) -> int:
-        if Tools.hasKey(link, 'leave') or Tools.hasKey(link, 'transport'):
-            if link['map'] == 'bank':
-                return 1000
-            if Tools.hasKey(costs, 'transport') and costs['transport'] != None:
-                return costs['transport']
-            else:
-                return Pathfinder.TRANSPORT_COST
-        elif Tools.hasKey(link, 'type') and link['type'] == 'enter':
-            if Tools.hasKey(costs, 'enter') and costs['enter'] != None:
-                return costs['enter']
-            else:
-                return Pathfinder.ENTER_COST
-        elif Tools.hasKey(link, 'type') and link['type'] == 'town':
-            if avoidTownWarps:
-                return 999999
-            else:
-                if Tools.hasKey(costs, 'town') and costs['town'] != None:
-                    return costs['town']
+        if link['data'] != None:
+            print(link['data'])
+            if (Tools.hasKey(link['data'], 'type')) and ((link['data']['type'] == 'leave') or (link['data']['type'] == 'transport')):
+                if link['map'] == 'bank':
+                    return 1000
+                if Tools.hasKey(costs, 'transport') and costs['transport'] != None:
+                    print("costs['transport']: ", costs['transport'])
+                    return costs['transport']
                 else:
-                    return Pathfinder.TOWN_COST
+                    print("Pathfinder.TRANSPORT_COST: ", Pathfinder.TRANSPORT_COST)
+                    return Pathfinder.TRANSPORT_COST
+            elif Tools.hasKey(link['data'], 'type') and link['data']['type'] == 'enter':
+                if Tools.hasKey(costs, 'enter') and costs['enter'] != None:
+                    print("costs['enter']: ", costs['enter'])
+                    return costs['enter']
+                else:
+                    print("Pathfinder.ENTER_COST: ", Pathfinder.ENTER_COST)
+                    return Pathfinder.ENTER_COST
+            elif Tools.hasKey(link['data'], 'type') and link['data']['type'] == 'town':
+                if avoidTownWarps:
+                    return sys.maxsize
+                else:
+                    if Tools.hasKey(costs, 'town') and costs['town'] != None:
+                        print("costs['town']: ", costs['town'])
+                        return costs['town']
+                    else:
+                        print("Pathfinder.TOWN_COST: ", Pathfinder.TOWN_COST)
+                        return Pathfinder.TOWN_COST
         
         if fr['map'] == to['map']:
-            return Tools.distance(fr, to)
+            d = Tools.distance(fr, to)
+            print(f"distance from {fr} to {to}: {d}")
+            return d
 
     @staticmethod
     def computePathCost(path: list, *, avoidTownWarps: bool = False, costs: dict[str, int] = {}) -> int:
@@ -261,7 +267,7 @@ class Pathfinder:
         points = []
 
         #beginUpdate?
-        
+        #majorNodeStart = datetime.now()
         for y in range(1, height - 1):
             for x in range(1, width):
                 mC = grid[y * width + x]
@@ -304,7 +310,7 @@ class Pathfinder:
                 elif (mL == WALKABLE) and (uL == UNWALKABLE) and (uC == WALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-        
+        #print(f"\n{map} major node processing time: ", (datetime.now() - majorNodeStart).total_seconds())
         transporters = []
         for npc in gMap['npcs']:
             if npc['id'] != 'transporter':
@@ -326,6 +332,7 @@ class Pathfinder:
                 angle += math.pi / 32
         
         doors = []
+        #doorStart = datetime.now()
         for door in gMap['doors']:
             if len(door) > 7 and door[7] == 'complicated':
                 continue
@@ -356,7 +363,7 @@ class Pathfinder:
                         points.append([x, y])
                         walkableNodes.append(fromNode)
                     angle += math.pi / 32
-        
+        #print(f"{map} door processing time: ", (datetime.now() - doorStart).total_seconds())
         townNode = Pathfinder.addNodeToGraph(map, gMap['spawns'][0][0], gMap['spawns'][0][1])
         walkableNodes.append(townNode)
         points.append([townNode['x'], townNode['y']])
@@ -366,8 +373,9 @@ class Pathfinder:
             node = Pathfinder.addNodeToGraph(map, spawn[0], spawn[1])
             walkableNodes.append(node)
             points.append([node['x'], node['y']])
-        wnStart = datetime.now()
-        print("num walkableNodes: ", len(walkableNodes))
+        #print(f"{map} num walkableNodes: ", len(walkableNodes))
+        #print(f"{map} num doors:", len(doors))
+        #nodesStart = datetime.now()
         for fromNode in walkableNodes:
             for door in doors:
                 if Pathfinder.doorDistance(fromNode, door) >= Constants.DOOR_REACH_DISTANCE:
@@ -385,7 +393,7 @@ class Pathfinder:
             for npc in transporters:
                 if Tools.distance(fromNode, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
                     continue
-                for toMap in Pathfinder.G['npcs']['transporter']['places']:
+                for toMap in Pathfinder.G['npcs']['transporter']['places'].keys():
                     if map == toMap:
                         continue
 
@@ -394,8 +402,7 @@ class Pathfinder:
                     toNode = Pathfinder.addNodeToGraph(toMap, spawn[0], spawn[1])
 
                     Pathfinder.addLinkToGraph(fromNode, toNode, { 'map': toMap, 'spawn': spawnID, 'type': 'transport', 'x': toNode['x'], 'y': toNode['y'] })
-        print("walkableNodes processing time: ", (datetime.now() - wnStart).total_seconds())
-        
+        #print(f"{map} nodes processing time: ", (datetime.now() - nodesStart).total_seconds())
         leaveLink = Pathfinder.addNodeToGraph('main', Pathfinder.G['maps']['main']['spawns'][0][0], Pathfinder.G['maps']['main']['spawns'][0][1])
         leaveLinkData = { 'map': leaveLink['map'], 'type': 'leave', 'x': leaveLink['x'], 'y': leaveLink['y'] }
         for node in walkableNodes:
@@ -421,8 +428,8 @@ class Pathfinder:
 
             name1 = f"{map}:{x1},{y1}"
             name2 = f"{map}:{x2},{y2}"
-            node1 = Pathfinder.graph.vs.select(name_eq=name1)[0]
-            node2 = Pathfinder.graph.vs.select(name_eq=name2)[0]
+            node1 = Pathfinder.graph.vs.find(name_eq=name1)
+            node2 = Pathfinder.graph.vs.find(name_eq=name2)
             if Pathfinder.canWalkPath({ 'map': map, 'x': x1, 'y': y1 }, { 'map': map, 'x': x2, 'y': y2 }):
                 Pathfinder.addLinkToGraph(node1, node2)
                 Pathfinder.addLinkToGraph(node2, node1)
@@ -489,15 +496,17 @@ class Pathfinder:
 
         path.append({ 'map': fromNode['map'], 'type': 'move', 'x': fromNode['x'], 'y': fromNode['y'] })
         for i in range((len(rawPath) - 1), 0, -1):
-            currentNode = rawPath[i]
-            nextNode = rawPath[i - 1]
+            currentNode = Pathfinder.graph.vs[rawPath[i]]
+            nextNode = Pathfinder.graph.vs[rawPath[i - 1]]
 
             lowestCostLinkData = None
             lowestCost = sys.maxsize
-            for link in Pathfinder.graph.es.select(source_eq = currentNode.index):
+            for link in Pathfinder.graph.es.select(_source = currentNode.index):
                 if link.target != nextNode.index:
                     continue
-                cost = Pathfinder.computeLinkCost(fromNode, toNode, link, avoidTownWarps=avoidTownWarps, costs=costs)
+                print(link)
+                cost = Pathfinder.computeLinkCost(fromNode, toNode, link=link, avoidTownWarps=avoidTownWarps, costs=costs)
+                print(f"cost: {cost}, lowestCost: {lowestCost}")
                 if (cost < lowestCost) or ((cost == lowestCost) and ((link != None) and (link['data']['type'] == 'move'))):
                     lowestCost = cost
                     lowestCostLinkData = link['data']

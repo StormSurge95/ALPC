@@ -429,7 +429,7 @@ def circumradius(ax, ay, bx, by, cx, cy):
     try:
         d = 0.5/(dx * ey - dy * ex)
     except Exception:
-        d = maxsize
+        d = float('inf')
     #print("d:", d)
     x = (ey * bl - dy * cl) * d
     y = (dx * cl - ex * bl) * d

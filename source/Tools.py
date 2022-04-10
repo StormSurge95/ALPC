@@ -9,32 +9,36 @@ class Tools:
 
     @staticmethod
     def distance(a, b):
-        if (a is None) or (b is None):
-            return sys.maxsize
-        mapA = getattr(a, 'map', None)
-        if mapA == None:
+        try:
+            mapA = a['map']
+        except Exception:
             try:
-                mapA = a['map']
+                mapA = a.map
             except Exception:
                 mapA = None
-        xA = getattr(a, 'x', None)
-        if xA == None:
+        try:
             xA = a['x']
-        yA = getattr(a, 'y', None)
-        if yA == None:
+        except Exception:
+            xA = a.x
+        try:
             yA = a['y']
-        mapB = getattr(b, 'y', None)
-        if mapB == None:
+        except Exception:
+            yA = a.y
+        try:
+            mapB = b['map']
+        except Exception:
             try:
-                mapB = b['map']
+                mapB = b.map
             except Exception:
                 mapB = None
-        xB = getattr(b, 'x', None)
-        if xB == None:
+        try:
             xB = b['x']
-        yB = getattr(b, 'y', None)
-        if yB == None:
+        except Exception:
+            xB = b.x
+        try:
             yB = b['y']
+        except Exception:
+            yB = b.y
         
         if (mapA != None) and (mapB != None) and (mapA != mapB):
             return sys.maxsize
