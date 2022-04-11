@@ -1689,7 +1689,12 @@ class Character(Observer):
     def getFirstEmptyInventorySlot(self, items = None) -> int:
         if items == None:
             items = self.items
-        pass
+        
+        for i in range(0, len(items)):
+            item = items[i]
+            if item == None:
+                return i
+        return None
 
     def getMonsterHuntQuest(self) -> None:
         pass
