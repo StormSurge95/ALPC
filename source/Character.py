@@ -1648,8 +1648,44 @@ class Character(Observer):
         return entities
 
     def getEntity(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None, returnHighestHP: bool = None, returnLowestHP: bool = None, returnNearest: bool = None) -> Entity:
-        pass
+        ents = self.getEntities(canDamage=canDamage, canWalkTo=canWalkTo, couldGiveCredit=couldGiveCredit, withinRange=withinRange, targetingMe=targetingMe, targetingPartyMember=targetingPartyMember, targetingPlayer=targetingPlayer, type=type, typeList=typeList, level=level, levelGreaterThan=levelGreaterThan, levelLessThan=levelLessThan, willBurnToDeath=willBurnToDeath, willDieToProjectiles=willDieToProjectiles)
 
+        numReturnOptions = 0
+        if returnHighestHP != None: numReturnOptions += 1
+        if returnLowestHP != None: numReturnOptions += 1
+        if returnNearest != None: numReturnOptions += 1
+        if numReturnOptions > 1: print("You supplied getEntity with more than one returnX option. This function may not return the entity you want.")
+
+        if len(ents) == 1 or numReturnOptions == 0: return ents[0]
+
+        if returnHighestHP:
+            highest = []
+            highestHP = 0
+            for ent in ents:
+                if ent.hp > highestHP:
+                    highest = ent
+                    highestHP = ent.hp
+            return highest
+        
+        if returnLowestHP:
+            lowest = []
+            lowestHP = sys.maxsize
+            for ent in ents:
+                if ent.hp < lowestHP:
+                    lowest = ent
+                    lowestHP = ent.hp
+            return lowest
+        
+        if returnNearest:
+            closest = []
+            closestDistance = sys.maxsize
+            for ent in ents:
+                distance = Tools.distance(self, ent)
+                if distance < closestDistance:
+                    closest = ent
+                    closestDistance = distance
+            return closest
+    
     def getFirstEmptyInventorySlot(self, items = None) -> int:
         if items == None:
             items = self.items
