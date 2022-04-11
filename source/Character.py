@@ -1,3 +1,4 @@
+from asyncio import constants
 from Observer import Observer
 from Player import Player
 from Entity import Entity
@@ -1696,8 +1697,60 @@ class Character(Observer):
                 return i
         return None
 
-    def getMonsterHuntQuest(self) -> None:
-        pass
+    async def getMonsterHuntQuest(self) -> None:
+        if not self.ready:
+            raise Exception("We aren't ready yet [getMonsterHuntQuest].")
+        if Tools.hasKey(self.s, 'monsterhunt') and self.s['monsterhunt']['c'] > 0:
+            raise Exception(f"We can't get a new monsterhunt. We have {self.s['monsterhunt']['ms']}ms left to kill {self.s['monsterhunt']['c']} {self.s['monsterhunt']['id']}(s).")
+        if self.ctype == 'merchant':
+            raise Exception("Merchants can't do Monster Hunts.")
+        
+        close = False
+        for npc in self.G['maps'][self.map]['npcs'].values():
+            if npc['id'] != 'monsterhunter': continue
+            if Tools.distance(self, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.NPC_INTERACTION_DISTANCE: continue
+            close = True
+            break
+        if not close:
+            raise Exception("We are too far away from the Monster Hunter NPC.")
+        
+        if Tools.hasKey(self.s, 'monsterhunt') and self.s['monsterhunt']['c'] == 0:
+            print("We are going to finish the current monster quest first...")
+            await self.finishMonsterHuntQuest()
+        
+        async def questFn():
+            questGot = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not questGot.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('player', self.playerHandler)
+                    questGot.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not questGot.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('player', self.playerHandler)
+                    questGot.set_result(Exception(value))
+            def failCheck(data):
+                if data == 'ecu_get_closer':
+                    reject("Too far away from Monster Hunt NPC.")
+                elif data == 'monsterhunt_merchant':
+                    reject("Merchants can't do Monster Hunts.")
+                self.gameResponseHandler(data)
+            def successCheck(data):
+                self.playerHandler(data)
+                if not Tools.hasKey(data, 'hitchhikers'): return
+                for hitchhiker in data['hitchhikers'].values():
+                    if hitchhiker[0] == 'game_response' and hitchhiker[1] == 'monsterhunt_started':
+                        resolve()
+                        return
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"getMonsterHuntQuest timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('game_response', failCheck)
+            self.socket.on('player', successCheck)
+            await self.socket.emit('monsterhunt')
+            while not questGot.done():
+                await asyncio.sleep(Constants.WAIT)
+            return questGot.result()
+        return await Character.tryExcept(questFn)
 
     async def getPlayers(self) -> dict:
         pass
