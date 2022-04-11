@@ -1537,6 +1537,7 @@ class Character(Observer):
                     return
                 if startedExchange and not Tools.hasKey(data['q'], 'exchange'):
                     resolve()
+                self.playerHandler(data)
             def bankCheck(data):
                 if type(data) == dict and data['response'] == 'bank_restrictions' and data['place'] == 'upgrade':
                     reject("You can't exchange items in the bank.")
@@ -1545,6 +1546,7 @@ class Character(Observer):
                         reject("We don't have enough items to exchange.")
                     elif data == 'exchange_existing':
                         reject("We are already exchanging something.")
+                self.gameResponseHandler(data)
             Tools.setTimeout(reject, 60, "exchange timeout (60s)")
             self.socket.on('player', completeCheck)
             self.socket.on('game_response', bankCheck)
@@ -1557,7 +1559,42 @@ class Character(Observer):
         return await Character.tryExcept(exchangeFn)
 
     async def finishMonsterHuntQuest(self):
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [finishMonsterHuntQuest].")
+        if not Tools.hasKey(self.s, 'monsterhunt'):
+            raise Exception("We don't have a monster hunt to turn in.")
+        if self.s['monsterhunt']['c'] > 0:
+            raise Exception(f"We still have to kill {self.s['monsterhunt']['c']} {self.s['monsterhunt']['id']}(s).")
+
+        close = False
+        for npc in self.G['maps'][self.map]['npcs'].values():
+            if npc['id'] != 'monsterhunter': continue
+            if Tools.distance(self, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.NPC_INTERACTION_DISTANCE: continue
+            close = True
+            break
+        if not close: raise Exception("We are too far away from the Monster Hunter NPC.")
+
+        async def questFn():
+            questFinished = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not questFinished.done():
+                    self.socket.on('player', self.playerHandler)
+                    questFinished.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not questFinished.done():
+                    self.socket.on('player', self.playerHandler)
+                    questFinished.set_result(value)
+            def successCheck(data):
+                if (not Tools.hasKey(data, 's')) or (not Tools.hasKey(data['s'], 'monsterhunt')):
+                    resolve()
+                self.playerHandler(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"finishMonsterHuntQuest timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('player', successCheck)
+            await self.socket.emit('monsterhunt')
+            while not questFinished.done():
+                await asyncio.sleep(Constants.WAIT)
+            return questFinished.result()
+        return await Character.tryExcept(questFn)
 
     def getEntities(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None) -> list[Entity]:
         pass
