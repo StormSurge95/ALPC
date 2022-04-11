@@ -7,6 +7,7 @@ import aiohttp
 #import ujson
 import logging
 import sys
+import pprint
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(sys.stdout)
@@ -22,10 +23,7 @@ async def main():
         #print(Pathfinder.getPath({'map': 'main', 'x': 0, 'y': 0}, {'map': 'halloween', 'x': 0, 'y': 0}))
         #await Game.startObserver(session, 'US', 'III')
         char = await Game.startCharacter(session, 'StormSurge', 'US', 'III')
-        print(char.getEntities(type='goo'))
-        print(char.getEntity(type='goo', returnHighestHP=True))
-        print(char.getEntity(type='goo', returnLowestHP=True))
-        print(char.getEntity(type='goo', returnNearest=True))
+        #pprint.pprint(await char.getPlayers())
         #await asyncio.sleep(5)
         #await char.enter('bank')
         # print('armorring?')

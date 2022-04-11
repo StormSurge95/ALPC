@@ -1753,7 +1753,28 @@ class Character(Observer):
         return await Character.tryExcept(questFn)
 
     async def getPlayers(self) -> dict:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [getPlayers].")
+        
+        async def playersFn():
+            playersData = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not playersData.done():
+                    self.socket.on('players', self.defaultHandler)
+                    playersData.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not playersData.done():
+                    self.socket.on('players', self.defaultHandler)
+                    playersData.set_result(value)
+            def dataCheck(data):
+                resolve(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"getPlayers timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('players', dataCheck)
+            await self.socket.emit('players')
+            while not playersData.done():
+                await asyncio.sleep(Constants.WAIT)
+            return playersData.result()
+        return await Character.tryExcept(playersFn)
 
     async def getPontyItems(self) -> list[dict]:
         pass
