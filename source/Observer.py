@@ -26,7 +26,7 @@ class Observer(object):
         self.G = g
         self.lastAllEntities = 0
         self.lastPositionUpdate = None
-        self.entities = {}
+        self.entities: dict[str, Entity] = {}
         self.pingIndex = 0
         self.pingMap = {}
         self.pingNum = 1

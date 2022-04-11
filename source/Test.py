@@ -22,7 +22,7 @@ async def main():
         #print(Pathfinder.getPath({'map': 'main', 'x': 0, 'y': 0}, {'map': 'halloween', 'x': 0, 'y': 0}))
         #await Game.startObserver(session, 'US', 'III')
         char = await Game.startCharacter(session, 'StormSurge', 'US', 'III')
-        print(char.entities)
+        print(char.getEntities(type='goo'))
         #await asyncio.sleep(5)
         #await char.enter('bank')
         # print('armorring?')

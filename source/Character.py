@@ -1597,7 +1597,55 @@ class Character(Observer):
         return await Character.tryExcept(questFn)
 
     def getEntities(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None) -> list[Entity]:
-        pass
+        entities = []
+        for entity in self.entities.values():
+            if targetingMe != None:
+                if targetingMe:
+                    if entity.target != self.id: continue
+                else:
+                    if entity.target == self.id: continue
+            if targetingPartyMember != None:
+                attackingPartyMember = entity.isAttackingPartyMember(self)
+                if targetingPartyMember:
+                    if not attackingPartyMember: continue
+                else:
+                    if attackingPartyMember: continue
+            if targetingPlayer != None and entity.target != targetingPlayer: continue
+            if level != None and entity.level != level: continue
+            if levelGreaterThan != None and levelGreaterThan <= entity.level: continue
+            if levelLessThan != None and levelLessThan >= entity.level: continue
+            if type != None and type != entity.type: continue
+            if typeList != None and entity.type not in typeList: continue
+            if withinRange != None and Tools.distance(self, entity) > withinRange: continue
+            if canDamage != None:
+                # We can't damage if avoidance >= 100
+                if canDamage and entity.avoidance >= 100: continue
+                if not canDamage and entity.avoidance < 100: continue
+                # We can't damage if we do physical damage and evasion is >= 100
+                if canDamage and self.damage_type == 'physical' and entity.evasion >= 100: continue
+                if not canDamage and self.damage_type == 'physical' and entity.evasion < 100: continue
+                # We can't damage if we do magical damage and reflection is >= 100
+                if canDamage and self.damage_type == 'magical' and entity.reflection >= 100: continue
+                if not canDamage and self.damage_type == 'magical' and entity.reflection < 100: continue
+            if canWalkTo != None:
+                canWalk = Pathfinder.canWalkPath(self, entity)
+                if canWalkTo and not canWalk: continue
+                if not canWalkTo and canWalk: continue
+            if couldGiveCredit != None:
+                couldCredit = entity.couldGiveCreditForKill(self)
+                if couldGiveCredit and not couldCredit: continue
+                if not couldGiveCredit and couldCredit: continue
+            if willBurnToDeath != None:
+                willBurn = entity.willBurnToDeath()
+                if willBurnToDeath and not willBurn: continue
+                if not willBurnToDeath and willBurn: continue
+            if willDieToProjectiles != None:
+                willDie = entity.willDieToProjectiles(self, self.projectiles, self.players, self.entities)
+                if willDieToProjectiles and not willDie: continue
+                if not willDieToProjectiles and willDie: continue
+            
+            entities.append(entity)
+        return entities
 
     def getEntity(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None, returnHighestHP: bool = None, returnLowestHP: bool = None, returnNearest: bool = None) -> Entity:
         pass
