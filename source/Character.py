@@ -1870,10 +1870,40 @@ class Character(Observer):
         return await Character.tryExcept(kickFn)
 
     async def leaveMap(self) -> None:
-        pass
+        if not self.ready: raise Exception("We aren't ready yet [leaveMap].")
+        async def leaveFn():
+            leaveComplete = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                self.socket.on('new_map', self.newMapHandler)
+                self.socket.on('game_response', self.gameResponseHandler)
+                leaveComplete.set_exception(Exception(reason))
+            def resolve(value = None):
+                self.socket.on('new_map', self.newMapHandler)
+                self.socket.on('game_response', self.gameResponseHandler)
+                leaveComplete.set_result(value)
+            def leaveCheck(data):
+                if data['name'] == 'main':
+                    resolve()
+                else:
+                    reject(f"We are now in {data['name']}, but we should be in main")
+                self.newMapHandler(data)
+            def failCheck(data):
+                if type(data) == str:
+                    if data == 'cant_escape':
+                        reject(f"Can't escape from current map {self.map}")
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"leaveMap timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('new_map', leaveCheck)
+            self.socket.on('game_response', failCheck)
+            await self.socket.emit('leave')
+            while not leaveComplete.done():
+                await asyncio.sleep(Constants.WAIT)
+            return leaveComplete.result()
+        return await Character.tryExcept(leaveFn)
 
     async def leaveParty(self) -> None:
-        pass
+        if not self.ready: raise Exception("We aren't ready yet [leaveParty].")
+        await self.socket.emit('party', { 'event': 'leave' })
+        return
 
     async def move(self, x: int, y: int, *, disableSafetyCheck: bool = False, resolveOnStart: bool = False) -> dict[str, int|str]:
         pass
@@ -1914,7 +1944,7 @@ class Character(Observer):
     async def sendFriendRequest(self, id: str) -> None:
         pass
 
-    async def sendGold(self, to: str, amound: int) -> int:
+    async def sendGold(self, to: str, amount: int) -> int:
         pass
 
     async def sendItem(self, to: str, inventoryPos: int, quantity: int = 1) -> None:
