@@ -1842,7 +1842,32 @@ class Character(Observer):
         return self.fear > 0
 
     async def kickPartyMember(self, toKick: str) -> None:
-        pass
+        if not self.party: return
+        if toKick not in self.partyData['list']: return
+        if toKick == self.id: return await self.leaveParty()
+        if self.partyData['list'].index(self.id) > self.partyData['list'].index(toKick): raise Exception(f"We can't kick {toKick}, they're higher on the party list.")
+
+        async def kickFn():
+            kicked = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not kicked.done():
+                    self.socket.on('party_update', self.partyUpdateHandler)
+                    kicked.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not kicked.done():
+                    self.socket.on('party_update', self.partyUpdateHandler)
+                    kicked.set_result(value)
+            def kickedCheck(data):
+                if (not Tools.hasKey(data, 'list')) or (toKick not in data['list']):
+                    resolve()
+                self.partyUpdateHandler(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"kickPartyMember timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('party_update', kickedCheck)
+            await self.socket.emit('party', { 'event': 'kick', 'name': toKick })
+            while not kicked.done():
+                await asyncio.sleep(Constants.WAIT)
+            return kicked.result()
+        return await Character.tryExcept(kickFn)
 
     async def leaveMap(self) -> None:
         pass
