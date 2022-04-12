@@ -1777,7 +1777,34 @@ class Character(Observer):
         return await Character.tryExcept(playersFn)
 
     async def getPontyItems(self) -> list[dict]:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [getPontyItems].")
+        async def pontyFn():
+            pontyItems = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not pontyItems.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('secondhands', self.defaultHandler)
+                    pontyItems.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not pontyItems.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('secondhands', self.defaultHandler)
+                    pontyItems.set_result(value)
+            def distanceCheck(data):
+                if data == 'buy_get_closer':
+                    reject("Too far away from secondhands NPC.")
+                self.gameResponseHandler(data)
+            def secondhandsItems(data):
+                resolve(data)
+            Tools.setTimeout(reject, 5, "getPontyItems timeout (5s)")
+            self.socket.on('secondhands', secondhandsItems)
+            self.socket.on('game_response', distanceCheck)
+            await self.socket.emit('secondhands')
+            while not pontyItems.done():
+                await asyncio.sleep(Constants.WAIT)
+            return pontyItems.result()
+        return await Character.tryExcept(pontyFn)
 
     def getTargetEntity(self) -> Entity:
         return self.entities.get(self.target)

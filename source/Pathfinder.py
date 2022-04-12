@@ -1,4 +1,5 @@
 from datetime import datetime
+import logging
 import math
 import sys
 from Delaunator import Delaunator
@@ -9,6 +10,8 @@ from Tools import Tools
 UNKNOWN = 1
 UNWALKABLE = 2
 WALKABLE = 3
+
+log = logging.getLogger(__name__)
 
 class Pathfinder:
     G = None
@@ -197,7 +200,7 @@ class Pathfinder:
         height = maxY - minY
 
         grid = [UNKNOWN] * (height * width)
-
+        yLineStart = datetime.now()
         for yLine in gGeo['y_lines']:
             lowerY = max([0, yLine[0] - minY - base['vn']])
             upperY = yLine[0] - minY + base['v']
@@ -210,7 +213,9 @@ class Pathfinder:
                     if x > upperX:
                         break
                     grid[y * width + x] = UNWALKABLE
-        
+        yLineFinish = datetime.now() - yLineStart
+        #print(f"\n{map} yLine processing time: {yLineFinish.total_seconds()}s")
+        xLineStart = datetime.now()
         for xLine in gGeo['x_lines']:
             lowerX = max([0, xLine[0] - minX - base['h']])
             upperX = xLine[0] - minX + base['h']
@@ -223,7 +228,9 @@ class Pathfinder:
                     if y > upperY:
                         break
                     grid[y * width + x] = UNWALKABLE
-        
+        xLineFinish = datetime.now() - xLineStart
+        #print(f"{map} xLine processing time: {xLineFinish.total_seconds()}s")
+        spawnStart = datetime.now()
         for spawn in gMap['spawns']:
             x = math.trunc(spawn[0]) - minX
             y = math.trunc(spawn[1]) - minY
@@ -251,6 +258,8 @@ class Pathfinder:
                     elif spanBelow and y < (height - 1) and grid[(y + 1) * width + x] != UNKNOWN:
                         spanBelow = 0
                     x += 1
+        spawnFinish = datetime.now() - spawnStart
+        #print(f"{map} spawn processing time: {spawnFinish.total_seconds()}s")
         Pathfinder.grids[map] = grid
 
         walkableNodes = []
@@ -265,7 +274,7 @@ class Pathfinder:
         linkAttr = {}
 
         #beginUpdate?
-        majorNodeStart = datetime.now()
+        mainNodeStart = datetime.now()
         for y in range(1, height - 1):
             for x in range(1, width):
                 mC = grid[y * width + x]
@@ -308,8 +317,10 @@ class Pathfinder:
                 elif (mL == WALKABLE) and (uL == UNWALKABLE) and (uC == WALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-        if map == 'main': print(f"\n{map} major node processing time: ", (datetime.now() - majorNodeStart).total_seconds())
+        mainNodeFinish = datetime.now() - mainNodeStart
+        #print(f"{map} main node processing time: {mainNodeFinish.total_seconds()}s")
         transporters = []
+        npcStart = datetime.now()
         for npc in gMap['npcs']:
             if npc['id'] != 'transporter':
                 continue
@@ -328,7 +339,8 @@ class Pathfinder:
                     points.append([x, y])
                     walkableNodes.append(fromNode)
                 angle += math.pi / 32
-        
+        npcFinish = datetime.now() - npcStart
+        #print(f"{map} npc processing time: {npcFinish.total_seconds()}s")
         doors = []
         doorStart = datetime.now()
         for door in gMap['doors']:
@@ -361,7 +373,8 @@ class Pathfinder:
                         points.append([x, y])
                         walkableNodes.append(fromNode)
                     angle += math.pi / 32
-        if map == 'main': print(f"{map} door processing time: ", (datetime.now() - doorStart).total_seconds())
+        doorFinish = datetime.now() - doorStart
+        #print(f"{map} door processing time: {doorFinish.total_seconds()}s")
         townNode = Pathfinder.addNodeToGraph(map, gMap['spawns'][0][0], gMap['spawns'][0][1])
         walkableNodes.append(townNode)
         points.append([townNode['x'], townNode['y']])
@@ -371,14 +384,27 @@ class Pathfinder:
             node = Pathfinder.addNodeToGraph(map, spawn[0], spawn[1])
             walkableNodes.append(node)
             points.append([node['x'], node['y']])
-        if map == 'main': print(f"{map} num walkableNodes: ", len(walkableNodes))
-        if map == 'main': print(f"{map} num doors:", len(doors))
         nodesStart = datetime.now()
-        for fromNode in walkableNodes:
-            for door in doors:
-                if Pathfinder.doorDistance(fromNode, door) >= Constants.DOOR_REACH_DISTANCE:
+        #print(f"Num Nodes: {len(walkableNodes)}")
+        #print(f"Num Doors: {len(doors)}")
+        for door in doors:
+            doorMaxL = int(door[0] - math.floor(door[2] / 2) - 5)
+            doorMaxR = int(door[0] + math.floor(door[2] / 2) + 5)
+            doorMaxT = int(door[1] - math.floor(door[3] / 2) - 5)
+            doorMaxB = int(door[1] + math.floor(door[3] / 2) + 5)
+            doorNodes = []
+            for x in range(doorMaxL, doorMaxR):
+                for y in range(doorMaxT, doorMaxB):
+                    node = None
+                    if Pathfinder.canStand({'map': map, 'x': x, 'y': y}):
+                        try:
+                            node = Pathfinder.graph.vs.select(name_eq=f"{map}:{x},{y}")[0]
+                        except Exception:
+                            node = None
+                    if node != None: doorNodes.append(node)
+            for node in doorNodes:
+                if Pathfinder.doorDistance(node, door) >= Constants.DOOR_REACH_DISTANCE:
                     continue
-
                 spawn2 = Pathfinder.G['maps'][door[4]]['spawns'][door[5]]
                 toDoor = Pathfinder.addNodeToGraph(door[4], spawn2[0], spawn2[1])
                 if len(door) > 7 and door[7] == 'key':
@@ -397,7 +423,67 @@ class Pathfinder:
                     typeAttr.append('transport')
                     xAttr.append(toDoor['x'])
                     yAttr.append(toDoor['y'])
-                    
+        # for npc in transporters:
+        #     npcMaxL = npc['position'][0] - Constants.TRANSPORTER_REACH_DISTANCE
+        #     npcMaxR = npc['position'][0] + Constants.TRANSPORTER_REACH_DISTANCE
+        #     npcMaxT = npc['position'][1] - Constants.TRANSPORTER_REACH_DISTANCE
+        #     npcMaxB = npc['position'][1] + Constants.TRANSPORTER_REACH_DISTANCE
+        #     npcNodes = []
+        #     for x in range(npcMaxL, npcMaxR):
+        #         for y in range(npcMaxT, npcMaxB):
+        #             node = None
+        #             if Pathfinder.canStand({'map': map, 'x': x, 'y': y}):
+        #                 try:
+        #                     node = Pathfinder.graph.vs.select(name_eq=f"{map}:{x},{y}")[0]
+        #                 except Exception:
+        #                     node = None
+        #             if node != None: npcNodes.append(node)
+        #     for node in npcNodes:
+        #         if Tools.distance(node, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
+        #             continue
+        #         for toMap in Pathfinder.G['npcs']['transporter']['places'].keys():
+        #             if map == toMap:
+        #                 continue
+
+        #             spawnID = Pathfinder.G['npcs']['transporter']['places'][toMap]
+        #             spawn = Pathfinder.G['maps'][toMap]['spawns'][spawnID]
+        #             toNode = Pathfinder.addNodeToGraph(toMap, spawn[0], spawn[1])
+
+        #             links.append([node, toNode])
+        #             keyAttr.append(None)
+        #             mapAttr.append(toMap)
+        #             spawnAttr.append(spawnID)
+        #             typeAttr.append('transport')
+        #             xAttr.append(toNode['x'])
+        #             yAttr.append(toNode['y'])
+        #print(f"Num NPCs:  {len(transporters)}")
+        for fromNode in walkableNodes:
+        #     # doorNodeStart = datetime.now()
+        #     # for door in doors:
+        #     #     if Pathfinder.doorDistance(fromNode, door) >= Constants.DOOR_REACH_DISTANCE:
+        #     #         continue
+
+        #     #     spawn2 = Pathfinder.G['maps'][door[4]]['spawns'][door[5]]
+        #     #     toDoor = Pathfinder.addNodeToGraph(door[4], spawn2[0], spawn2[1])
+        #     #     if len(door) > 7 and door[7] == 'key':
+        #     #         links.append([fromNode, toDoor])
+        #     #         keyAttr.append(door[8])
+        #     #         mapAttr.append(toDoor['map'])
+        #     #         typeAttr.append('enter')
+        #     #         xAttr.append(toDoor['x'])
+        #     #         yAttr.append(toDoor['y'])
+        #     #         spawnAttr.append(None)
+        #     #     else:
+        #     #         links.append([fromNode, toDoor])
+        #     #         keyAttr.append(None)
+        #     #         mapAttr.append(toDoor['map'])
+        #     #         spawnAttr.append(door[5])
+        #     #         typeAttr.append('transport')
+        #     #         xAttr.append(toDoor['x'])
+        #     #         yAttr.append(toDoor['y'])
+        #     # doorNodeFinish = datetime.now() - doorNodeStart
+        #     # print(f"{map} door-node processing time: {doorNodeFinish.total_seconds()}s")
+        #     npcNodeStart = datetime.now()
             for npc in transporters:
                 if Tools.distance(fromNode, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
                     continue
@@ -416,7 +502,10 @@ class Pathfinder:
                     typeAttr.append('transport')
                     xAttr.append(toNode['x'])
                     yAttr.append(toNode['y'])
-        if map == 'main': print(f"{map} nodes processing time: ", (datetime.now() - nodesStart).total_seconds())
+        #     npcNodeFinish = datetime.now() - npcNodeStart
+        #     #print(f"{map} npc-node processing time: {npcNodeFinish.total_seconds()}s")
+        #nodesFinish = datetime.now() - nodesStart
+        #print(f"{map} nodes reprocessing time: {nodesFinish.total_seconds()}s")
         leaveLink = Pathfinder.addNodeToGraph('main', Pathfinder.G['maps']['main']['spawns'][0][0], Pathfinder.G['maps']['main']['spawns'][0][1])
         leaveLinkData = { 'map': leaveLink['map'], 'type': 'leave', 'x': leaveLink['x'], 'y': leaveLink['y'], 'key': None, 'spawn': None }
         for node in walkableNodes:
@@ -536,7 +625,6 @@ class Pathfinder:
         path = []
 
         rawPath = Pathfinder.graph.get_shortest_paths(fromNode, to=toNode, mode='out', output='vpath')[0]
-        print("rawPath: ", rawPath)
         if len(rawPath) == 0:
             raise Exception("We did not find a path...")
 
@@ -554,7 +642,7 @@ class Pathfinder:
                     map = Pathfinder.graph.vs[link.target]['map']
                     x = Pathfinder.graph.vs[link.target]['x']
                     y = Pathfinder.graph.vs[link.target]['y']
-                    lowestCostLinkData = { 'map': map, 'type': 'move', 'x': x, 'y': y }
+                    lowestCostLinkData = { 'map': map, 'type': 'move' if link['type'] == None else link['type'], 'x': x, 'y': y }
             
             if lowestCostLinkData != None:
                 path.append(lowestCostLinkData)
@@ -672,7 +760,7 @@ class Pathfinder:
         return to
 
     @staticmethod
-    async def prepare(g, *, base = {}, cheat = False, include_bank_b = False, include_bank_u = False, include_test = False):
+    async def prepare(g, *, base = Constants.BASE, cheat = False, include_bank_b = False, include_bank_u = False, include_test = False):
         Pathfinder.G = g
 
         maps = [Constants.PATHFINDER_FIRST_MAP]
@@ -704,16 +792,14 @@ class Pathfinder:
         for map in maps:
             if map == 'test' and not include_test:
                 continue
-            if base:
-                Pathfinder.getGrid(map, base = base)
-            else:
-                gStart = datetime.now()
-                Pathfinder.getGrid(map)
-                if map == 'main': print(f"{map} grid processing time:", (datetime.now() - gStart).total_seconds())
-        if base:
-            Pathfinder.getGrid('jail', base = base)
-        else:
-            Pathfinder.getGrid('jail')
+            gridStart = datetime.now()
+            Pathfinder.getGrid(map, base = base)
+            gridFinish = datetime.now() - gridStart
+            print(f"{map} grid processing time: {gridFinish.total_seconds()}s")
+        gridStart = datetime.now()
+        Pathfinder.getGrid('jail', base = base)
+        gridFinish = datetime.now() - gridStart
+        print(f"jail grid processing time: {gridFinish.total_seconds()}s")
         
         if cheat:
             if 'winterland' in maps:
