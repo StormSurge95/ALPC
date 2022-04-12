@@ -1906,7 +1906,79 @@ class Character(Observer):
         return
 
     async def move(self, x: int, y: int, *, disableSafetyCheck: bool = False, resolveOnStart: bool = False) -> dict[str, int|str]:
-        pass
+        if not self.ready: raise Exception("We aren't ready yet [move].")
+        if x == None or y == None: raise Exception("Please provide an x and y coordinate to move.")
+        if not (type(x) == int or type(x) == float) or not (type(y) == int or type(y) == float): raise Exception("Please use a whole number for both x and y.")
+
+        to = { 'map': self.map, 'x': x, 'y': y }
+        if not disableSafetyCheck:
+            to = Pathfinder.getSafeWalkTo({'map': self.map, 'x': self.x, 'y': self.y}, {'map': self.map, 'x': x, 'y': y})
+            if to['x'] != x or to['y'] != y:
+                print(f"move: We can't move to ({x}, {y}) safely. We will move to ({to['x']}, {to['y']}) instead.")
+        
+        if self.x == to['x'] and self.y == to['y']: return { 'map': self.map, 'x': self.x, 'y': self.y }
+
+        async def moveFn():
+            global timeToFinishMove
+            timeToFinishMove = 0.001 + Tools.distance(self, { 'x': to['x'], 'y': to['y'] }) / self.speed
+
+            moveFinished = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not moveFinished.done():
+                    self.socket.on('player', self.playerHandler)
+                    moveFinished.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not moveFinished.done():
+                    self.socket.on('player', self.playerHandler)
+                    moveFinished.set_result(value)
+            async def checkPlayer(data):
+                if resolveOnStart:
+                    if data['going_x'] == to['x'] and data['going_y'] == to['y']:
+                        Tools.clearTimeout(timeout)
+                        resolve({ 'map': self.map, 'x': data['x'], 'y': data['y'] })
+                    self.playerHandler(data)
+                    return
+                if not data['moving'] or data['going_x'] != to['x'] or data['going_y'] != to['y']:
+                    try:
+                        newData = await self.requestPlayerData()
+                        if not newData['moving'] or newData['going_x'] != to['x'] or newData['going_y'] != to['y']:
+                            Tools.clearTimeout(timeout)
+                            reject(f"move to ({to['x']}, {to['y']}) failed")
+                    except Exception as e:
+                        print(e)
+                else:
+                    timeToFinishMove = 0.001 + Tools.distance(self, { 'x': data['going_x'], 'y': data['going_y'] }) / data['speed']
+                    Tools.clearTimeout(timeout)
+                    timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
+                self.playerHandler(data)
+
+            def checkPosition():
+                if resolveOnStart:
+                    resolve({ 'map': self.map, 'x': self.x, 'y': self.y })
+                    return
+                self.updatePositions()
+                if self.x == to['x'] and self.y == to['y']:
+                    resolve({ 'map': self.map, 'x': to['x'], 'y': to['y'] })
+                elif self.moving and self.going_x == to['x'] and self.going_y == to['y']:
+                    timeToFinishMove = Tools.distance(self, { 'x': to['x'], 'y': to['y'] }) / self.speed
+                    timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
+                else:
+                    reject(f"move to ({to['x']}, {to['y']}) failed (We're currently going from ({self.x}, {self.y}) to ({self.going_x}, {self.going_y}))")
+            global timeout
+            timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
+            self.socket.on('player', checkPlayer)
+            while not moveFinished.done():
+                await asyncio.sleep(Constants.WAIT)
+            return moveFinished.result()
+        if not self.moving or self.going_x != to['x'] or self.going_y != to['y']:
+            await self.socket.emit('move', { 'going_x': to['x'], 'going_y': to['y'], 'm': self.m, 'x': self.x, 'y': self.y })
+            self.updatePositions()
+            self.going_x = to['x']
+            self.going_y = to['y']
+            self.moving = True
+
+        return await Character.tryExcept(moveFn)
+
 
     async def openChest(self, id: str) -> dict:
         pass

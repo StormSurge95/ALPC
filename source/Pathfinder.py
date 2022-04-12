@@ -795,11 +795,11 @@ class Pathfinder:
             gridStart = datetime.now()
             Pathfinder.getGrid(map, base = base)
             gridFinish = datetime.now() - gridStart
-            print(f"{map} grid processing time: {gridFinish.total_seconds()}s")
+            #print(f"{map} grid processing time: {gridFinish.total_seconds()}s")
         gridStart = datetime.now()
         Pathfinder.getGrid('jail', base = base)
         gridFinish = datetime.now() - gridStart
-        print(f"jail grid processing time: {gridFinish.total_seconds()}s")
+        #print(f"jail grid processing time: {gridFinish.total_seconds()}s")
         
         if cheat:
             if 'winterland' in maps:
