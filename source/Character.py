@@ -1810,7 +1810,30 @@ class Character(Observer):
         return self.entities.get(self.target)
 
     async def getTrackerData(self) -> dict:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [getTrackerData].")
+        if not self.hasItem('tracker'):
+            raise Exception("We need a tracker to obtain tracker data.")
+        
+        async def trackerFn():
+            gotData = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not gotData.done():
+                    self.socket.on('tracker', self.defaultHandler)
+                    gotData.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not gotData.done():
+                    self.socket.on('tracker', self.defaultHandler)
+                    gotData.set_result(value)
+            def gotCheck(data):
+                resolve(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"getTrackerData timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('tracker', gotCheck)
+            await self.socket.emit('tracker')
+            while not gotData.done():
+                await asyncio.sleep(Constants.WAIT)
+            return gotData.result()
+        return await Character.tryExcept(trackerFn)
 
     def isFull(self) -> bool:
         return self.esize == 0
