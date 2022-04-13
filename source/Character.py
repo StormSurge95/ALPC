@@ -1920,8 +1920,8 @@ class Character(Observer):
 
         async def moveFn():
             global timeToFinishMove
-            timeToFinishMove = 0.001 + Tools.distance(self, { 'x': to['x'], 'y': to['y'] }) / self.speed
-
+            timeToFinishMove = 0.001 + self.ping + Tools.distance(self, { 'x': to['x'], 'y': to['y'] }) / self.speed
+            global timeout
             moveFinished = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not moveFinished.done():
@@ -1947,7 +1947,7 @@ class Character(Observer):
                     except Exception as e:
                         print(e)
                 else:
-                    timeToFinishMove = 0.001 + Tools.distance(self, { 'x': data['going_x'], 'y': data['going_y'] }) / data['speed']
+                    timeToFinishMove = 0.001 + self.ping + Tools.distance(self, { 'x': data['going_x'], 'y': data['going_y'] }) / data['speed']
                     Tools.clearTimeout(timeout)
                     timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
                 self.playerHandler(data)
@@ -1960,11 +1960,11 @@ class Character(Observer):
                 if self.x == to['x'] and self.y == to['y']:
                     resolve({ 'map': self.map, 'x': to['x'], 'y': to['y'] })
                 elif self.moving and self.going_x == to['x'] and self.going_y == to['y']:
-                    timeToFinishMove = Tools.distance(self, { 'x': to['x'], 'y': to['y'] }) / self.speed
+                    timeToFinishMove = 0.001 + self.ping + Tools.distance(self, { 'x': to['x'], 'y': to['y'] }) / self.speed
                     timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
                 else:
                     reject(f"move to ({to['x']}, {to['y']}) failed (We're currently going from ({self.x}, {self.y}) to ({self.going_x}, {self.going_y}))")
-            global timeout
+            
             timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
             self.socket.on('player', checkPlayer)
             while not moveFinished.done():
@@ -1979,9 +1979,28 @@ class Character(Observer):
 
         return await Character.tryExcept(moveFn)
 
-
     async def openChest(self, id: str) -> dict:
-        pass
+        if not self.ready: raise Exception("We aren't ready yet [openChest].")
+        async def chestFn():
+            chestOpened = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not chestOpened.done():
+                    self.socket.on('chest_opened', self.defaultHandler)
+                    chestOpened.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not chestOpened.done():
+                    self.socket.on('chest_opened', self.defaultHandler)
+                    chestOpened.set_result(value)
+            def openCheck(data):
+                if data['id'] == id:
+                    resolve(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"openChest timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('chest_opened', openCheck)
+            await self.socket.emit('open_chest', { 'id': id })
+            while not chestOpened.done():
+                await asyncio.sleep(Constants.WAIT)
+            return chestOpened.result()
+        return await Character.tryExcept(chestFn)
 
     async def openMerchantStand(self) -> None:
         pass

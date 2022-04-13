@@ -46,6 +46,13 @@ class Observer(object):
                 self.pings = pings
         return
 
+    @property
+    def ping(self):
+        if len(self.pings) == 0:
+            return 0
+        else:
+            return min(self.pings)
+
     def defaultHandler(self, data):
         return
 
