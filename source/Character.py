@@ -1,4 +1,3 @@
-from asyncio import constants
 from Observer import Observer
 from Player import Player
 from Entity import Entity
@@ -2003,12 +2002,100 @@ class Character(Observer):
         return await Character.tryExcept(chestFn)
 
     async def openMerchantStand(self) -> None:
-        pass
+        if not self.ready: raise Exception("We aren't ready yet [openMerchantStand].")
+        if self.stand: return
+
+        stand = None
+        for item in ['supercomputer', 'computer', 'stand1', 'stand0']:
+            stand = self.locateItem(item)
+            if stand != None: break
+        if stand == None: raise Exception("Could not find a suitable merchant stand in inventory.")
+
+        async def standFn():
+            opened = asyncio.get_event_loop().create_future()
+            def reject(reason=None):
+                if not opened.done():
+                    self.socket.on('player', self.playerHandler)
+                    opened.set_exception(Exception(reason))
+            def resolve(value=None):
+                if not opened.done():
+                    self.socket.on('player', self.playerHandler)
+                    opened.set_result(value)
+            def checkStand(data):
+                if Tools.hasKey(data, 'stand') and data['stand']:
+                    resolve()
+                self.playerHandler(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"openMerchantStand timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('player', checkStand)
+            await self.socket.emit('merchant', { 'num': stand })
+            while not opened.done():
+                await asyncio.sleep(Constants.WAIT)
+            return opened.result()
+        return await Character.tryExcept(standFn)
 
     async def regenHP(self) -> None:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [regenHP].")
+        async def regenHPFn():
+            regenReceived = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not regenReceived.done():
+                    self.socket.on('eval', self.evalHandler)
+                    self.socket.on('disappearing_text', self.defaultHandler)
+                    regenReceived.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not regenReceived.done():
+                    self.socket.on('eval', self.evalHandler)
+                    self.socket.on('disappearing_text', self.defaultHandler)
+                    regenReceived.set_result(value)
+            def regenCheck(data):
+                if Tools.hasKey(data, 'code') and ('pot_timeout' in data['code']):
+                    resolve()
+                self.evalHandler(data)
+            def failCheck(data):
+                if data['id'] == self.id and data['message'] == 'NOT READY':
+                    reject("regenHP is on cooldown")
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"regenHP timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('eval', regenCheck)
+            self.socket.on('disappearing_text', failCheck)
+            await self.socket.emit('use', { 'item': 'hp' })
+            while not regenReceived.done():
+                await asyncio.sleep(Constants.WAIT)
+            return regenReceived.result()
+        return await Character.tryExcept(regenHPFn)
 
     async def regenMP(self) -> None:
+        if not self.ready:
+            raise Exception("We aren't ready yet [regenHP].")
+        async def regenMPFn():
+            regenReceived = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not regenReceived.done():
+                    self.socket.on('eval', self.evalHandler)
+                    self.socket.on('disappearing_text', self.defaultHandler)
+                    regenReceived.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not regenReceived.done():
+                    self.socket.on('eval', self.evalHandler)
+                    self.socket.on('disappearing_text', self.defaultHandler)
+                    regenReceived.set_result(value)
+            def regenCheck(data):
+                if Tools.hasKey(data, 'code') and ('pot_timeout' in data['code']):
+                    resolve()
+                self.evalHandler(data)
+            def failCheck(data):
+                if data['id'] == self.id and data['message'] == 'NOT READY':
+                    reject("regenHP is on cooldown")
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"regenMP timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('eval', regenCheck)
+            self.socket.on('disappearing_text', failCheck)
+            await self.socket.emit('use', { 'item': 'mp' })
+            while not regenReceived.done():
+                await asyncio.sleep(Constants.WAIT)
+            return regenReceived.result()
+        return await Character.tryExcept(regenMPFn)
+
+    async def respawn(self, safe: bool = False):
         pass
 
     async def scare(self) -> list[str]:
