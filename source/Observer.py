@@ -6,16 +6,7 @@ from Player import Player
 #from database.Database import Database
 from Tools import Tools
 from Constants import Constants
-import logging
-import logging.config
 import math
-import sys
-
-logger = logging.getLogger(__name__)
-handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
-handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
-logger.addHandler(handler)
 
 class Observer(object):
     pingsPerServer : dict = {}
@@ -30,7 +21,7 @@ class Observer(object):
         self.pingIndex = 0
         self.pingMap = {}
         self.pingNum = 1
-        self.pings = []
+        self.pings = {}
         self.players = {}
         self.projectiles = {}
         self.S = {}
@@ -48,12 +39,12 @@ class Observer(object):
 
     @property
     def ping(self):
-        if len(self.pings) == 0:
+        if len(self.pings.values()) == 0:
             return 0
         else:
-            return min(self.pings)
+            return min(self.pings.values())
 
-    def defaultHandler(self, data):
+    def defaultHandler(self, data = None):
         return
 
     def actionHandler(self, data):
@@ -138,7 +129,7 @@ class Observer(object):
     def pingAckHandler(self, data):
         ping = self.pingMap.get(data['id'], None)
         if ping:
-            time = (datetime.datetime.now() - ping.time).total_seconds()
+            time = (datetime.datetime.now() - ping['time']).total_seconds()
             self.pings[self.pingIndex] = time
             self.pingIndex += 1
             self.pingIndex = self.pingIndex % Constants.MAX_PINGS

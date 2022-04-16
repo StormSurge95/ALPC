@@ -46,13 +46,13 @@ class Character(Observer):
         if (hasattr(self, 'lastAllEntities')) and (((datetime.now() - self.lastAllEntities).total_seconds()) > Constants.STALE_MONSTER_S):
             await self.requestEntitiesData()
 
-        msSinceLastUpdate = ((datetime.now() - self.lastPositionUpdate).total_seconds())
-        if msSinceLastUpdate > Constants.UPDATE_POSITIONS_EVERY_S:
+        sSinceLastUpdate = ((datetime.now() - self.lastPositionUpdate).total_seconds())
+        if sSinceLastUpdate > Constants.UPDATE_POSITIONS_EVERY_S:
             self.updatePositions()
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S)
             return
         else:
-            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S - msSinceLastUpdate)
+            self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S - sSinceLastUpdate)
             return
 
     def parseCharacter(self, data) -> None:
@@ -180,7 +180,7 @@ class Character(Observer):
 
     def updatePositions(self) -> None:
         if getattr(self, 'lastPositionUpdate'):
-            msSinceLastUpdate = (datetime.now() - self.lastPositionUpdate).total_seconds()
+            msSinceLastUpdate = (datetime.now() - self.lastPositionUpdate).total_seconds() * 1000
             if msSinceLastUpdate == 0:
                 return
 
@@ -210,7 +210,7 @@ class Character(Observer):
         self.ready = False
         return
 
-    def disconnectReasonHandler(self) -> None:
+    def disconnectReasonHandler(self, data = None) -> None:
         self.ready = False
         return
 
@@ -355,23 +355,29 @@ class Character(Observer):
         return
 
     async def requestEntitiesData(self) -> dict | None:
-        print('requestEntitiesData called...')
         if not self.ready:
             raise Exception("We aren't ready yet [requestEntitiesData]")
 
         async def entitiesDataFn():
             entitiesData = asyncio.get_event_loop().create_future()
-            async def checkEntitiesEvent(data):
-                if data['type'] == 'all':
-                    entitiesData.set_result(data)
-
             def reject(reason):
                 if not entitiesData.done():
+                    self.socket.on('entities', self.entitiesHandler)
                     entitiesData.set_exception(Exception(reason))
+            def resolve(value):
+                if not entitiesData.done():
+                    self.socket.on('entities', self.entitiesHandler)
+                    entitiesData.set_result(value)
+            def checkEntitiesEvent(data):
+                if data['type'] == 'all':
+                    resolve(data)
+                self.entitiesHandler(data)
+
+            
             Tools.setTimeout(reject, Constants.TIMEOUT, f'requestEntitiesData timeout ({Constants.TIMEOUT}s)')
             self.socket.on('entities', checkEntitiesEvent)
 
-            await self.socket.emit('send_updates', {})
+            await self.socket.emit('send_updates')
             while not entitiesData.done():
                 await asyncio.sleep(Constants.WAIT)
             return entitiesData.result()
@@ -1547,7 +1553,7 @@ class Character(Observer):
                     elif data == 'exchange_existing':
                         reject("We are already exchanging something.")
                 self.gameResponseHandler(data)
-            Tools.setTimeout(reject, 60, "exchange timeout (60s)")
+            Tools.setTimeout(reject, Constants.TIMEOUT * 60, f"exchange timeout ({Constants.TIMEOUT * 60}s)")
             self.socket.on('player', completeCheck)
             self.socket.on('game_response', bankCheck)
             q = self.items[inventoryPos]['q'] if Tools.hasKey(self.items[inventoryPos], 'q') else None
@@ -1796,7 +1802,7 @@ class Character(Observer):
                 self.gameResponseHandler(data)
             def secondhandsItems(data):
                 resolve(data)
-            Tools.setTimeout(reject, 5, "getPontyItems timeout (5s)")
+            Tools.setTimeout(reject, Constants.TIMEOUT * 5, f"getPontyItems timeout ({Constants.TIMEOUT * 5}s)")
             self.socket.on('secondhands', secondhandsItems)
             self.socket.on('game_response', distanceCheck)
             await self.socket.emit('secondhands')
@@ -2096,7 +2102,36 @@ class Character(Observer):
         return await Character.tryExcept(regenMPFn)
 
     async def respawn(self, safe: bool = False):
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [respawn].")
+        
+        async def respawnFn():
+            respawned = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not respawned.done():
+                    self.socket.on('new_map', self.newMapHandler)
+                    self.socket.on('game_log', self.defaultHandler)
+                    respawned.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not respawned.done():
+                    self.socket.on('new_map', self.newMapHandler)
+                    self.socket.on('game_log', self.defaultHandler)
+                    respawned.set_result(value)
+            def respawnCheck(data):
+                if Tools.hasKey(data, 'effect') and data['effect'] == 1:
+                    resolve({ 'map': data['name'], 'x': data['x'], 'y': data['y'] })
+                self.newMapHandler(data)
+            def failCheck(data):
+                if data == "Can't respawn yet.":
+                    reject(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"respawn timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('new_map', respawnCheck)
+            self.socket.on('game_log', failCheck)
+            await self.socket.emit('respawn', { 'safe': safe })
+            while not respawned.done():
+                await asyncio.sleep(Constants.WAIT)
+            return respawned.result()
+        return await Character.tryExcept(respawnFn)
 
     async def scare(self) -> list[str]:
         pass
@@ -2139,8 +2174,207 @@ class Character(Observer):
 
     lastSmartMove = datetime.now()
     smartMoving = None
-    async def smartMove(self, to, *, avoidTownWarps: bool = None, getWithin: int = None, useBlink: bool = None, costs: dict[str, int] = { 'enter': None, 'town': None, 'transport': None }) -> dict[str, int | str]:
-        pass
+    async def smartMove(self, to, *, avoidTownWarps: bool = False, getWithin: int = 0, useBlink: bool = False, costs: dict = { 'blink': None, 'town': None, 'transport': None }) -> dict[str, int | str]:
+        if not self.ready:
+            raise Exception("We aren't ready yet [smartMove].")
+        
+        if self.rip:
+            raise Exception("We can't smartMove; we are dead.")
+
+        if (not Tools.hasKey(costs, 'blink')) or costs['blink'] == None:
+            costs['blink'] = self.speed * 3.2 + 250
+        if (not Tools.hasKey(costs, 'town')) or costs['town'] == None:
+            costs['town'] = self.speed * (4 + (min(self.ping, 1000) / 500))
+        if (not Tools.hasKey(costs, 'transport')) or costs['transport'] == None:
+            costs['transport'] = self.speed * (min(self.ping, 1000) / 500)
+        
+        fixedTo = {}
+        path = []
+        if type(to) == str:
+            # Check if destination is a map name
+            gMap = self.G['maps'].get(to, None)
+            if gMap != None:
+                mainSpawn = gMap['spawns'][0]
+                fixedTo = { 'map': to, 'x': mainSpawn[0], 'y': mainSpawn[1] }
+            
+            # Check if destination is a monster type
+            if not fixedTo:
+                gMonster = self.G['monsters'].get(to, None)
+                if gMonster != None:
+                    locations = self.locateMonster(to)
+                    closestDistance = sys.maxsize
+                    for location in locations:
+                        potentialPath = await Pathfinder.getPath(self, location, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
+                        distance = Pathfinder.computePathCost(potentialPath)
+                        if distance < closestDistance:
+                            path = potentialPath
+                            fixedTo = path[len(path) - 1]
+                            closestDistance = distance
+        
+            if not fixedTo:
+                locations = self.locateNPC(to)
+                closestDistance = sys.maxsize
+                for location in locations:
+                    potentialPath = await Pathfinder.getPath(self, location, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
+                    distance = Pathfinder.computePathCost(potentialPath)
+                    if distance < closestDistance:
+                        path = potentialPath
+                        fixedTo = path[len(path) - 1]
+                        closestDistance = distance
+            
+            if not fixedTo:
+                gItem = self.G['items'].get(to, None)
+                if gItem != None:
+                    for map in self.G['maps'].values():
+                        if Tools.hasKey(map, 'ignore'): continue
+                        for npc in map['npcs'].values():
+                            if not Tools.hasKey(npc, 'items'): continue
+                            for item in self.G['npcs'][npc['id']]['items'].values():
+                                if item == to:
+                                    return self.smartMove(npc['id'], avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
+            
+            if not fixedTo:
+                raise Exception(f"Could not find a suitable destination for '{to}'")
+        elif Tools.hasKey(to, 'x') and Tools.hasKey(to, 'y'):
+            fixedTo = { 'map': to['map'] if Tools.hasKey(to, 'map') else self.map, 'x': to['x'], 'y': to['y'] }
+        else:
+            print(to)
+            raise Exception("'to' is unsuitable for smartMove. We need a 'map', an 'x', and a 'y'.")
+
+        distance = Tools.distance(self, fixedTo)
+        if distance == 0: return fixedTo
+        if getWithin >= distance: return { 'map': self.map, 'x': self.x, 'y': self.y }
+
+        self.smartMoving = fixedTo
+        try:
+            if not path:
+                path = await Pathfinder.getPath(self, fixedTo, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
+        except Exception as e:
+            self.smartMoving = None
+            raise e
+        
+        started = datetime.now()
+        self.lastSmartMove = started
+        numAttempts = 0
+        i = 0
+        while i < len(path):
+            currentMove = path[i]
+
+            if started != self.lastSmartMove:
+                if type(to) == str:
+                    raise Exception(f"smartMove to {to} cancelled (new smartMove started)")
+                else:
+                    raise Exception(f"smartMove to {to['map']}:{to['x']},{to['y']} cancelled (new smartMove started)")
+            
+            if self.rip:
+                raise Exception("We died while smartMoving")
+            
+            if getWithin >= Tools.distance(self, fixedTo):
+                break # We're already close enough
+                
+            # conditional?
+
+            if currentMove['type'] == 'move' and self.map == fixedTo['map'] and getWithin > 0:
+                angle = math.atan2(self.y - fixedTo['y'], self.x - fixedTo['x'])
+                potentialMove = { 'map': self.map, 'type': 'move', 'x': fixedTo['x'] + math.cos(angle) * getWithin, 'y': fixedTo['y'] + math.sin(angle) * getWithin }
+                if Pathfinder.canWalkPath(self, potentialMove):
+                    i = len(path)
+                    currentMove = potentialMove
+            
+            if currentMove['type'] == 'move':
+                j = i + 1
+                while j < len(path):
+                    potentialMove = path[j]
+                    if potentialMove['map'] != currentMove['map']: break
+                    if potentialMove['type'] == 'town': break
+
+                    if potentialMove['type'] == 'move' and Pathfinder.canWalkPath(self, potentialMove):
+                        i = j
+                        currentMove = potentialMove
+                    j += 1
+            
+            if useBlink and self.canUse('blink'):
+                blinked = False
+                j = len(path) - 1
+                while j > i:
+                    potentialMove = path[j]
+                    if potentialMove['map'] != self.map:
+                        j -= 1
+                        continue
+                    if Tools.distance(currentMove, potentialMove) < costs['blink']: break
+
+                    roundedMove = {}
+                    for [dX, dY] in [[0, 0], [-10, 0], [10, 0], [0, -10], [0, 10], [-10, -10], [-10, 10], [10, -10], [10, 10]]:
+                        roundedX = round((potentialMove['x'] + dX) / 10) * 10
+                        roundedY = round((potentialMove['y'] + dY) / 10) * 10
+                        if not Pathfinder.canStand({ 'map': potentialMove['map'], 'x': roundedX, 'y': roundedY }):
+                            j -= 1
+                            continue
+
+                        roundedMove = { 'map': potentialMove['map'], 'x': roundedX, 'y': roundedY }
+                        break
+                    if not roundedMove:
+                        j -= 1
+                        continue
+
+                    try:
+                        await self.blink(roundedMove['x'], roundedMove['y'])
+                    except Exception as e:
+                        if not self.canUse('blink'): break
+                        print(f"Error blinking while smartMoving: {e}, attempting 1 more time")
+                        try:
+                            await asyncio.sleep(Constants.TIMEOUT / 1000)
+                            await self.blink(roundedMove['x'], roundedMove['y'])
+                        except Exception as e2:
+                            print(f"Failed blinking while smartMoving: {e2}")
+                            break
+                    await self.stopWarpToTown()
+                    i = j - 1
+                    blinked = True
+                    break
+                if blinked:
+                    i += 1
+                    continue
+            
+            j = i + 1
+            while j < len(path):
+                futureMove = path[j]
+                if currentMove['map'] != futureMove['map']: break
+                if futureMove['type'] == 'town':
+                    await self.warpToTown()
+                    i = j - 1
+                    break
+                j += 1
+            
+            try:
+                if currentMove['type'] == 'enter':
+                    pass
+                elif currentMove['type'] == 'leave':
+                    await self.leaveMap()
+                elif currentMove['type'] == 'move':
+                    if currentMove['map'] != self.map:
+                        raise Exception(f"We are supposed to be in {currentMove['map']}, but we are in {self.map}")
+                    await self.move(currentMove['x'], currentMove['y'], disableSafetyCheck=True)
+                elif currentMove['type'] == 'town':
+                    await self.warpToTown()
+                elif currentMove['type'] == 'transport':
+                    await self.transport(currentMove['map'], currentMove['spawn'])
+            except Exception as e:
+                print(e)
+                numAttempts += 1
+                if numAttempts >= 3:
+                    self.smartMoving = None
+                    raise Exception("We are having some trouble smartMoving...")
+                
+                await self.stopWarpToTown()
+                await self.requestPlayerData()
+                path = await Pathfinder.getPath(self, fixedTo, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
+                i = -1
+                await asyncio.sleep(Constants.TIMEOUT / 1000)
+            i += 1
+        self.smartMoving = None
+        await self.stopWarpToTown()
+        return { 'map': self.map, 'x': self.x, 'y': self.y }
 
     async def startKonami(self) -> str:
         pass
@@ -2163,7 +2397,47 @@ class Character(Observer):
         pass
 
     async def transport(self, map: str, spawn: int):
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [transport].")
+        
+        async def transportFn():
+            transportComplete = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not transportComplete.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('new_map', self.newMapHandler)
+                    transportComplete.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not transportComplete.done():
+                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.on('new_map', self.newMapHandler)
+                    transportComplete.set_result(value)
+            def transportCheck(data):
+                if data['name'] == map:
+                    resolve()
+                else:
+                    reject(f"We are now in {data['name']}, but we should be in {map}")
+                self.newMapHandler(data)
+            def failCheck(data):
+                if type(data) == dict:
+                    if data['response'] == 'bank_opx' and data['reason'] == 'mounted':
+                        reject(f"{data['name']} is currently in the bank, we can't enter.")
+                elif type(data) == str:
+                    if data == "cant_enter":
+                        reject(f"The door to spawn {spawn} on {map} requires a key. Use 'enter' instead of 'transport'.")
+                    elif data == 'transport_cant_locked':
+                        reject(f"We haven't unlocked the door to spawn {spawn} on {map}.")
+                    elif data == 'transport_cant_reach':
+                        reject(f"We are too far away from the door to spawn {spawn} on {map}.")
+                self.gameResponseHandler(data)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"transport timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('game_response', failCheck)
+            self.socket.on('new_map', transportCheck)
+            await self.socket.emit('transport', { 's': spawn, 'to': map })
+            while not transportComplete.done():
+                await asyncio.sleep(Constants.WAIT)
+            return transportComplete.result()
+        return await Character.tryExcept(transportFn)
 
     async def unequip(self, slot: str):
         pass

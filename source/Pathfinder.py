@@ -1,7 +1,6 @@
 from datetime import datetime
 import logging
 import math
-from re import X
 import sys
 from Delaunator import Delaunator
 import igraph
@@ -29,30 +28,30 @@ class Pathfinder:
         b_x = b[0]
         b_y = b[1]
         halfWidth = b[2] / 2
-        halfHeight = b[3] / 2
+        height = b[3]
 
         if (a['x'] >= b_x):
             if a['y'] >= b_y:
                 # Check inside door
-                if a['x'] <= b_x + halfWidth and a['y'] <= b_y + halfHeight: return 0
+                if a['x'] <= b_x + halfWidth and a['y'] <= b_y: return 0
                 # Check top-right
-                return Tools.distance(a, { 'x': b_x + halfWidth, 'y': b_y + halfHeight })
+                return math.hypot(a['x'] - (b_x + halfWidth), a['y'] - b_y)
             else:
                 # Check inside door
-                if a['x'] <= b_x + halfWidth and a['y'] >= b_y - halfHeight: return 0
+                if a['x'] <= b_x + halfWidth and a['y'] >= b_y: return 0
                 # Check bottom-right
-                return Tools.distance(a, { 'x': b_x + halfWidth, 'y': b_y - halfHeight })
+                return math.hypot(a['x'] - (b_x + halfWidth), a['y'] - (b_y - height))
         else:
             if a['y'] >= b_y:
                 # Check inside door
-                if a['x'] >= b_x - halfWidth and a['y'] <= b_y + halfHeight: return 0
+                if a['x'] >= b_x - halfWidth and a['y'] <= b_y: return 0
                 # Check top-left
-                return Tools.distance(a, { 'x': b_x - halfWidth, 'y': b_y + halfHeight })
+                return math.hypot(a['x'] - (b_x + halfWidth), a['y'] - b_y)
             else:
                 # Check inside door
-                if a['x'] >= b_x - halfWidth and a['y'] >= b_y - halfHeight: return 0
+                if a['x'] >= b_x - halfWidth and a['y'] >= b_y: return 0
                 # Check bottom-left
-                return Tools.distance(a, { 'x': b_x - halfWidth, 'y': b_y - halfHeight })
+                return math.hypot(a['x'] - (b_x - halfWidth), a['y'] - (b_y - height))
 
     @staticmethod
     def addLinkToGraph(fr, to, data=None):
@@ -83,23 +82,26 @@ class Pathfinder:
         return False
 
     @staticmethod
-    def canWalkPath(_from: dict, _to: dict) -> bool:
+    def canWalkPath(fr: dict, to: dict) -> bool:
         if Pathfinder.G == None:
             raise Exception("Prepare pathfinding before querying canWalkPath()!")
-        if _from['map'] != _to['map']:
+        frMap = fr['map'] if type(fr) == dict else fr.map
+        frX = fr['x'] if type(fr) == dict else fr.x
+        frY = fr['y'] if type(fr) == dict else fr.y
+        if frMap != to['map']:
             return False # We can't walk across maps
         
-        grid = Pathfinder.getGrid(_from['map'])
-        width = Pathfinder.G['geometry'][_from['map']]['max_x'] - Pathfinder.G['geometry'][_from['map']]['min_x']
+        grid = Pathfinder.getGrid(frMap)
+        width = Pathfinder.G['geometry'][frMap]['max_x'] - Pathfinder.G['geometry'][frMap]['min_x']
 
         xStep = None
         yStep = None
         error = None
         errorPrev = None
-        x = math.trunc(_from['x']) - Pathfinder.G['geometry'][_from['map']]['min_x']
-        y = math.trunc(_from['y']) - Pathfinder.G['geometry'][_from['map']]['min_y']
-        dx = math.trunc(_to['x']) - math.trunc(_from['x'])
-        dy = math.trunc(_to['y']) - math.trunc(_from['y'])
+        x = math.trunc(frX) - Pathfinder.G['geometry'][frMap]['min_x']
+        y = math.trunc(frY) - Pathfinder.G['geometry'][frMap]['min_y']
+        dx = math.trunc(to['x']) - math.trunc(frX)
+        dy = math.trunc(to['y']) - math.trunc(frY)
 
         if grid[y * width + x] != WALKABLE:
             return False
@@ -166,19 +168,19 @@ class Pathfinder:
     
     @staticmethod
     def computeLinkCost(fr, to, link, *, avoidTownWarps: bool = None, costs: dict[str, int] = {}) -> int:
-        if ((link['type'] == 'leave') or (link['type'] == 'transport')):
-            if link['map'] == 'bank':
+        if ((link['data']['type'] == 'leave') or (link['data']['type'] == 'transport')):
+            if link['data']['map'] == 'bank':
                 return 1000
             if Tools.hasKey(costs, 'transport') and costs['transport'] != None:
                 return costs['transport']
             else:
                 return Pathfinder.TRANSPORT_COST
-        elif link['type'] == 'enter':
+        elif link['data']['type'] == 'enter':
             if Tools.hasKey(costs, 'enter') and costs['enter'] != None:
                 return costs['enter']
             else:
                 return Pathfinder.ENTER_COST
-        elif link['type'] == 'town':
+        elif link['data']['type'] == 'town':
             if avoidTownWarps:
                 return sys.maxsize
             else:
@@ -277,12 +279,7 @@ class Pathfinder:
         walkableNodes = []
         points = []
         links = []
-        keyAttr = []
-        mapAttr = []
-        typeAttr = []
-        xAttr = []
-        yAttr = []
-        spawnAttr = []
+        linkData = []
         linkAttr = {}
 
         #beginUpdate?
@@ -331,7 +328,6 @@ class Pathfinder:
                     points.append([mapX, mapY])
         
         transporters = []
-        npcStart = datetime.now()
         for npc in gMap['npcs']:
             if npc['id'] != 'transporter':
                 continue
@@ -352,7 +348,6 @@ class Pathfinder:
                 angle += math.pi / 32
         
         doors = []
-        doorStart = datetime.now()
         for door in gMap['doors']:
             if len(door) > 7 and door[7] == 'complicated':
                 continue
@@ -395,10 +390,10 @@ class Pathfinder:
             points.append([node['x'], node['y']])
         
         for door in doors:
-            doorMaxL = int(door[0] - math.floor(door[2] / 2) - 5)
-            doorMaxR = int(door[0] + math.floor(door[2] / 2) + 5)
-            doorMaxT = int(door[1] - math.floor(door[3] / 2) - 5)
-            doorMaxB = int(door[1] + math.floor(door[3] / 2) + 5)
+            doorMaxL = int(door[0]) - Constants.DOOR_REACH_DISTANCE
+            doorMaxR = int(door[0]) + Constants.DOOR_REACH_DISTANCE
+            doorMaxT = int(door[1]) - Constants.DOOR_REACH_DISTANCE
+            doorMaxB = int(door[1]) + Constants.DOOR_REACH_DISTANCE
             doorNodes = []
             for x in range(doorMaxL, doorMaxR):
                 for y in range(doorMaxT, doorMaxB):
@@ -416,20 +411,10 @@ class Pathfinder:
                 toDoor = Pathfinder.addNodeToGraph(door[4], spawn2[0], spawn2[1])
                 if len(door) > 7 and door[7] == 'key':
                     links.append([fromNode, toDoor])
-                    keyAttr.append(door[8])
-                    mapAttr.append(toDoor['map'])
-                    typeAttr.append('enter')
-                    xAttr.append(toDoor['x'])
-                    yAttr.append(toDoor['y'])
-                    spawnAttr.append(None)
+                    linkData.append({ 'key': door[8], 'map': toDoor['map'], 'type': 'enter', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': None })
                 else:
                     links.append([fromNode, toDoor])
-                    keyAttr.append(None)
-                    mapAttr.append(toDoor['map'])
-                    spawnAttr.append(door[5])
-                    typeAttr.append('transport')
-                    xAttr.append(toDoor['x'])
-                    yAttr.append(toDoor['y'])
+                    linkData.append({ 'key': None, 'map': toDoor['map'], 'type': 'transport', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': door[5] })
         for fromNode in walkableNodes:
             for npc in transporters:
                 if Tools.distance(fromNode, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
@@ -443,33 +428,18 @@ class Pathfinder:
                     toNode = Pathfinder.addNodeToGraph(toMap, spawn[0], spawn[1])
 
                     links.append([fromNode, toNode])
-                    keyAttr.append(None)
-                    mapAttr.append(toMap)
-                    spawnAttr.append(spawnID)
-                    typeAttr.append('transport')
-                    xAttr.append(toNode['x'])
-                    yAttr.append(toNode['y'])
+                    linkData.append({ 'key': None, 'map': toMap, 'type': 'transport', 'x': toNode['x'], 'y': toNode['y'], 'spawn': spawnID})
         
         leaveLink = Pathfinder.addNodeToGraph('main', Pathfinder.G['maps']['main']['spawns'][0][0], Pathfinder.G['maps']['main']['spawns'][0][1])
         leaveLinkData = { 'map': leaveLink['map'], 'type': 'leave', 'x': leaveLink['x'], 'y': leaveLink['y'], 'key': None, 'spawn': None }
         for node in walkableNodes:
             if node != townNode:
                 links.append([node, townNode])
-                keyAttr.append(townLinkData['key'])
-                mapAttr.append(townLinkData['map'])
-                spawnAttr.append(townLinkData['spawn'])
-                typeAttr.append(townLinkData['type'])
-                xAttr.append(townLinkData['x'])
-                yAttr.append(townLinkData['y'])
+                linkData.append({ 'key': townLinkData['key'], 'map': townLinkData['map'], 'type': townLinkData['type'], 'x': townLinkData['x'], 'y': townLinkData['y'], 'spawn': townLinkData['spawn'] })
             
             if map == 'cyberland' or map == 'jail':
                 links.append([node, leaveLink])
-                keyAttr.append(leaveLinkData['key'])
-                mapAttr.append(leaveLinkData['map'])
-                spawnAttr.append(leaveLinkData['spawn'])
-                typeAttr.append(leaveLinkData['type'])
-                xAttr.append(leaveLinkData['x'])
-                yAttr.append(leaveLinkData['y'])
+                linkData.append({ 'key': leaveLinkData['key'], 'map': leaveLinkData['map'], 'type': leaveLinkData['type'], 'x': leaveLinkData['x'], 'y': leaveLinkData['y'], 'spawn': leaveLinkData['spawn'] })
 
         delaunay = Delaunator(points)
         
@@ -491,26 +461,11 @@ class Pathfinder:
             node2 = Pathfinder.graph.vs.find(name_eq=name2)
             if Pathfinder.canWalkPath({ 'map': map, 'x': x1, 'y': y1 }, { 'map': map, 'x': x2, 'y': y2 }):
                 links.append([node1, node2])
-                keyAttr.append(None)
-                mapAttr.append(None)
-                spawnAttr.append(None)
-                typeAttr.append(None)
-                xAttr.append(None)
-                yAttr.append(None)
+                linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x2, 'y': y2, 'spawn': None })
                 links.append([node2, node1])
-                keyAttr.append(None)
-                mapAttr.append(None)
-                spawnAttr.append(None)
-                typeAttr.append(None)
-                xAttr.append(None)
-                yAttr.append(None)
+                linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x1, 'y': y1, 'spawn': None })
 
-        linkAttr['key'] = keyAttr
-        linkAttr['map'] = mapAttr
-        linkAttr['spawn'] = spawnAttr
-        linkAttr['type'] = typeAttr
-        linkAttr['x'] = xAttr
-        linkAttr['y'] = yAttr
+        linkAttr['data'] = linkData
         Pathfinder.graph.add_edges(links, linkAttr)
             
         return grid
@@ -556,14 +511,16 @@ class Pathfinder:
         return closest
 
     @staticmethod
-    def getPath(fr, to, *, avoidTownWarps: bool = False, getWithin: int = None, useBlink: bool = False, costs = {}):
+    async def getPath(fr, to, *, avoidTownWarps: bool = False, getWithin: int = None, useBlink: bool = False, costs = {}):
         if not Pathfinder.G:
             raise Exception("Prepaire pathfinding before querying getPath()!")
+        frMap = fr['map'] if type(fr) == dict else fr.map
+        frX = fr['x'] if type(fr) == dict else fr.x
+        frY = fr['y'] if type(fr) == dict else fr.y
+        if (frMap == to['map']) and (Pathfinder.canWalkPath(fr, to)) and (Tools.distance(fr, to) < Pathfinder.TOWN_COST):
+            return [{ 'map': frMap, 'type': 'move', 'x': frX, 'y': frY }, { 'map': to['map'], 'type': 'move', 'x': to['x'], 'y': to['y'] }]
         
-        if (fr['map'] == to['map']) and (Pathfinder.canWalkPath(fr, to)) and (Tools.distance(fr, to) < Pathfinder.TOWN_COST):
-            return [{ 'map': fr['map'], 'type': 'move', 'x': fr['x'], 'y': fr['y'] }, { 'map': to['map'], 'type': 'move', 'x': to['x'], 'y': to['y'] }]
-        
-        fromNode = Pathfinder.findClosestNode(fr['map'], fr['x'], fr['y'])
+        fromNode = Pathfinder.findClosestNode(frMap, frX, frY)
         toNode = Pathfinder.findClosestNode(to['map'], to['x'], to['y'])
 
         path = []
@@ -581,12 +538,12 @@ class Pathfinder:
             lowestCost = sys.maxsize
             for link in Pathfinder.graph.es.select(_source = currentNode.index, _target = nextNode.index):
                 cost = Pathfinder.computeLinkCost(currentNode, nextNode, link=link, avoidTownWarps=avoidTownWarps, costs=costs)
-                if (cost < lowestCost) or ((cost == lowestCost) and ((link['type'] == 'move'))):
+                if (cost < lowestCost) or ((cost == lowestCost) and ((link['data']['type'] == 'move'))):
                     lowestCost = cost
                     map = Pathfinder.graph.vs[link.target]['map']
                     x = Pathfinder.graph.vs[link.target]['x']
                     y = Pathfinder.graph.vs[link.target]['y']
-                    lowestCostLinkData = { 'map': map, 'type': 'move' if link['type'] == None else link['type'], 'x': x, 'y': y }
+                    lowestCostLinkData = link['data']
             
             if lowestCostLinkData != None:
                 path.append(lowestCostLinkData)
@@ -620,13 +577,16 @@ class Pathfinder:
     
     @staticmethod
     def getSafeWalkTo(fr, to):
-        if fr['map'] != to['map']:
+        frMap = fr['map'] if type(fr) == dict else fr.map
+        frX = fr['x'] if type(fr) == dict else fr.x
+        frY = fr['y'] if type(fr) == dict else fr.y
+        if frMap != to['map']:
             raise Exception("We can't walk across maps.")
         if not Pathfinder.G:
             raise Exception("Prepare pathfinding beofre querying getSafeWalkTo()!")
 
-        grid = Pathfinder.getGrid(fr['map'])
-        gGeo = Pathfinder.G['geometry'][fr['map']]
+        grid = Pathfinder.getGrid(frMap)
+        gGeo = Pathfinder.G['geometry'][frMap]
         width = gGeo['max_x'] - gGeo['min_x']
 
         xStep = None
@@ -634,14 +594,14 @@ class Pathfinder:
         error = None
         errorPrev = None
 
-        x = math.trunc(fr['x']) - gGeo['min_x']
-        y = math.trunc(fr['y']) - gGeo['min_y']
-        dx = math.trunc(to['x']) - math.trunc(fr['x'])
-        dy = math.trunc(to['y']) - math.trunc(fr['y'])
+        x = math.trunc(frX) - gGeo['min_x']
+        y = math.trunc(frY) - gGeo['min_y']
+        dx = math.trunc(to['x']) - math.trunc(frX)
+        dy = math.trunc(to['y']) - math.trunc(frY)
 
         if grid[y * width + x] != WALKABLE:
-            print(f"We shouldn't be able to be where we are in from ({fr['map']}:{fr['x']},{fr['y']}).")
-            return Pathfinder.findClosestNode(fr['map'], fr['x'], fr['y'])
+            print(f"We shouldn't be able to be where we are in from ({frMap}:{frX},{frY}).")
+            return Pathfinder.findClosestNode(frMap, frX, frY)
         
         if dy < 0:
             yStep = -1
@@ -666,17 +626,17 @@ class Pathfinder:
                     error -= ddx
                     if error + errorPrev < ddx:
                         if grid[(y - yStep) * width + x] != WALKABLE:
-                            return { 'map': fr['map'], 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                     elif error + errorPrev > ddx:
                         if grid[y * width + x - xStep] != WALKABLE:
-                            return { 'map': fr['map'], 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                     else:
                         if grid[(y - yStep) * width + x] != WALKABLE:
-                            return { 'map': fr['map'], 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                         if grid[y * width + x - xStep] != WALKABLE:
-                            return { 'map': fr['map'], 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                 if grid[y * width + x] != WALKABLE:
-                    return { 'map': fr['map'], 'x': x - xStep + gGeo['min_x'], 'y': y + gGeo['min_y'] }
+                    return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y + gGeo['min_y'] }
                 errorPrev = error
         else:
             errorPrev = error = dy
@@ -688,17 +648,17 @@ class Pathfinder:
                     error -= ddy
                     if error + errorPrev < ddy:
                         if grid[y * width + x - xStep] != WALKABLE:
-                            return { 'map': fr['map'], 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                     elif error + errorPrev > ddy:
                         if grid[(y - yStep) * width + x] != WALKABLE:
-                            return { 'map': fr['map'], 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                     else:
                         if grid[y * width + x - xStep] != WALKABLE:
-                            return { 'map': fr['map'], 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                         if grid[(y - yStep) * width + x] != WALKABLE:
-                            return { 'map': fr['map'], 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                 if grid[y * width + x] != WALKABLE:
-                    return { 'map': fr['map'], 'x': x + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                    return { 'map': frMap, 'x': x + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                 errorPrev = error
         
         return to

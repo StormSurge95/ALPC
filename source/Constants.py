@@ -6,12 +6,12 @@ class Constants:
     MAX_PINGS: int = 50
     PING_EVERY_S: int = 30
     CONNECT_TIMEOUT_S: int = 10
-    RECONNECT_TIMEOUT_MS: int = 40
+    RECONNECT_TIMEOUT_S: int = 40
     STALE_MONSTER_S: int = 60
     STALE_PROJECTILE_S: int = 10
     TIMEOUT: int = 1
-    UPDATE_POSITIONS_EVERY_S: int = 0.025
-    WAIT: float = 0.25
+    UPDATE_POSITIONS_EVERY_S: float = 0.025
+    WAIT: float = 0.1
 
     ## Various distance related things ##
     MAX_VISIBLE_RANGE: int = 800
