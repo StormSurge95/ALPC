@@ -389,23 +389,9 @@ class Pathfinder:
             walkableNodes.append(node)
             points.append([node['x'], node['y']])
         
-        for door in doors:
-            doorMaxL = int(door[0]) - Constants.DOOR_REACH_DISTANCE
-            doorMaxR = int(door[0]) + Constants.DOOR_REACH_DISTANCE
-            doorMaxT = int(door[1]) - Constants.DOOR_REACH_DISTANCE
-            doorMaxB = int(door[1]) + Constants.DOOR_REACH_DISTANCE
-            doorNodes = []
-            for x in range(doorMaxL, doorMaxR):
-                for y in range(doorMaxT, doorMaxB):
-                    node = None
-                    if Pathfinder.canStand({'map': map, 'x': x, 'y': y}):
-                        try:
-                            node = Pathfinder.graph.vs.select(name_eq=f"{map}:{x},{y}")[0]
-                        except Exception:
-                            node = None
-                    if node != None: doorNodes.append(node)
-            for node in doorNodes:
-                if Pathfinder.doorDistance(node, door) >= Constants.DOOR_REACH_DISTANCE:
+        for fromNode in walkableNodes:
+            for door in doors:
+                if Pathfinder.doorDistance(fromNode, door) >= Constants.DOOR_REACH_DISTANCE:
                     continue
                 spawn2 = Pathfinder.G['maps'][door[4]]['spawns'][door[5]]
                 toDoor = Pathfinder.addNodeToGraph(door[4], spawn2[0], spawn2[1])
@@ -415,7 +401,6 @@ class Pathfinder:
                 else:
                     links.append([fromNode, toDoor])
                     linkData.append({ 'key': None, 'map': toDoor['map'], 'type': 'transport', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': door[5] })
-        for fromNode in walkableNodes:
             for npc in transporters:
                 if Tools.distance(fromNode, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
                     continue

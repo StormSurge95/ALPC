@@ -1,6 +1,7 @@
 import math
 import sys
 import asyncio
+import igraph
 
 class Tools:
     @staticmethod
@@ -10,35 +11,17 @@ class Tools:
     @staticmethod
     def distance(a, b):
         try:
-            mapA = a['map']
+            mapA = a.map if hasattr(a, 'map') else a['map']
         except Exception:
-            try:
-                mapA = a.map
-            except Exception:
-                mapA = None
+            mapA = None
+        xA = a.x if hasattr(a, 'x') else a['x']
+        yA = a.y if hasattr(a, 'y') else a['y']
         try:
-            xA = a['x']
+            mapB = b.map if hasattr(b, 'map') else b['map']
         except Exception:
-            xA = a.x
-        try:
-            yA = a['y']
-        except Exception:
-            yA = a.y
-        try:
-            mapB = b['map']
-        except Exception:
-            try:
-                mapB = b.map
-            except Exception:
-                mapB = None
-        try:
-            xB = b['x']
-        except Exception:
-            xB = b.x
-        try:
-            yB = b['y']
-        except Exception:
-            yB = b.y
+            mapB = None
+        xB = b.x if hasattr(b, 'x') else b['x']
+        yB = b.y if hasattr(b, 'y') else b['y']
         
         if (mapA != None) and (mapB != None) and (mapA != mapB):
             return sys.maxsize

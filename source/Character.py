@@ -2134,7 +2134,47 @@ class Character(Observer):
         return await Character.tryExcept(respawnFn)
 
     async def scare(self) -> list[str]:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [scare].")
+        
+        equipped = self.isEquipped('jacko')
+        inInventory = self.hasItem('jacko')
+        if (not equipped) and (not inInventory):
+            raise Exception('You need a jacko to use scare.')
+        
+        async def scareFn():
+            scared = asyncio.get_event_loop().create_future()
+            ids = []
+            def reject(reason = None):
+                nonlocal scared
+                if not scared.done():
+                    self.socket.on('ui', self.defaultHandler)
+                    self.socket.on('eval', self.evalHandler)
+                    scared.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal scared
+                if not scared.done():
+                    self.socket.on('ui', self.defaultHandler)
+                    self.socket.on('eval', self.evalHandler)
+                    scared.set_result(value)
+            def idsCheck(data):
+                nonlocal ids
+                if data['type'] == 'scare':
+                    ids = data['ids']
+                    self.socket.on('ui', self.defaultHandler)
+            def cooldownCheck(data):
+                nonlocal ids
+                match = re.search('skill_timeout\s*\(\s*[\'"]scare[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
+                if match != None:
+                    resolve(ids)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"scare timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('ui', idsCheck)
+            self.socket.on('eval', cooldownCheck)
+            await self.socket.emit('skill', { 'name': 'scare' })
+            while not scared.done():
+                await asyncio.sleep(Constants.WAIT)
+            return scared.result()
+        return await Character.tryExcept(scareFn)
 
     async def sell(self, itemPos: int, quantity: int = 1) -> bool:
         pass
@@ -2184,9 +2224,9 @@ class Character(Observer):
         if (not Tools.hasKey(costs, 'blink')) or costs['blink'] == None:
             costs['blink'] = self.speed * 3.2 + 250
         if (not Tools.hasKey(costs, 'town')) or costs['town'] == None:
-            costs['town'] = self.speed * (4 + (min(self.ping, 1000) / 500))
+            costs['town'] = self.speed * (4 + (min(self.ping, 1) / 0.5))
         if (not Tools.hasKey(costs, 'transport')) or costs['transport'] == None:
-            costs['transport'] = self.speed * (min(self.ping, 1000) / 500)
+            costs['transport'] = self.speed * (min(self.ping, 1) / 0.5)
         
         fixedTo = {}
         path = []
@@ -2210,7 +2250,8 @@ class Character(Observer):
                             path = potentialPath
                             fixedTo = path[len(path) - 1]
                             closestDistance = distance
-        
+
+            # Check if destination is an npc role
             if not fixedTo:
                 locations = self.locateNPC(to)
                 closestDistance = sys.maxsize
@@ -2222,6 +2263,7 @@ class Character(Observer):
                         fixedTo = path[len(path) - 1]
                         closestDistance = distance
             
+            # Check if destination is an item name. If so, go to NPC that sells it.
             if not fixedTo:
                 gItem = self.G['items'].get(to, None)
                 if gItem != None:
@@ -2274,6 +2316,7 @@ class Character(Observer):
                 
             # conditional?
 
+            # 'getWithin' Check
             if currentMove['type'] == 'move' and self.map == fixedTo['map'] and getWithin > 0:
                 angle = math.atan2(self.y - fixedTo['y'], self.x - fixedTo['x'])
                 potentialMove = { 'map': self.map, 'type': 'move', 'x': fixedTo['x'] + math.cos(angle) * getWithin, 'y': fixedTo['y'] + math.sin(angle) * getWithin }
@@ -2281,18 +2324,19 @@ class Character(Observer):
                     i = len(path)
                     currentMove = potentialMove
             
+            # Shortcut Check
             if currentMove['type'] == 'move':
                 j = i + 1
                 while j < len(path):
                     potentialMove = path[j]
                     if potentialMove['map'] != currentMove['map']: break
                     if potentialMove['type'] == 'town': break
-
                     if potentialMove['type'] == 'move' and Pathfinder.canWalkPath(self, potentialMove):
                         i = j
                         currentMove = potentialMove
                     j += 1
             
+            # Blink Check
             if useBlink and self.canUse('blink'):
                 blinked = False
                 j = len(path) - 1
@@ -2336,6 +2380,7 @@ class Character(Observer):
                     i += 1
                     continue
             
+            # Town Check
             j = i + 1
             while j < len(path):
                 futureMove = path[j]
@@ -2458,7 +2503,52 @@ class Character(Observer):
         pass
 
     async def warpToTown(self):
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [warpToTown].")
+        startedWarp = False
+        if Tools.hasKey(self.c, 'town'):
+            startedWarp = True
+        async def warpFn():
+            warpComplete = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal warpComplete
+                if not warpComplete.done():
+                    self.socket.on('player', self.playerHandler)
+                    self.socket.on('new_map', self.newMapHandler)
+                    warpComplete.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal warpComplete
+                if not warpComplete.done():
+                    self.socket.on('player', self.playerHandler)
+                    self.socket.on('new_map', self.newMapHandler)
+                    warpComplete.set_result(value)
+            def failCheck(data):
+                nonlocal startedWarp
+                if (not startedWarp) and (Tools.hasKey(data['c'], 'town')):
+                    startedWarp = True
+                    self.playerHandler(data)
+                    return
+                if startedWarp and not Tools.hasKey(data['c'], 'town'):
+                    reject('warpToTown failed.')
+                    self.playerHandler(data)
+            def warpedCheck(data):
+                if data['effect'] == 1:
+                    resolve({ 'map': data['name'], 'x': data['x'], 'y': data['y'] })
+                    self.newMapHandler(data)
+            def startFail():
+                nonlocal startedWarp
+                if not startedWarp:
+                    reject("warpToTown timeout (1s)")
+            Tools.setTimeout(startFail, 1)
+            Tools.setTimeout(reject, 5, "warpToTown timeout (5s)")
+            self.socket.on('player', failCheck)
+            self.socket.on('new_map', warpedCheck)
+            if not startedWarp:
+                await self.socket.emit('town')
+            while not warpComplete.done():
+                await asyncio.sleep(Constants.WAIT)
+            return warpComplete.result()
+        return await Character.tryExcept(warpFn)
 
     async def withdrawGold(self, gold: int):
         pass
