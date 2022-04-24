@@ -1,5 +1,5 @@
 import asyncio
-import socketio
+import psSocketIO
 import datetime
 from Entity import Entity
 from Player import Player
@@ -12,7 +12,7 @@ class Observer(object):
     pingsPerServer : dict = {}
 
     def __init__(self, serverData: dict, g: dict):
-        self.socket = socketio.AsyncClient()
+        self.socket = psSocketIO.AsyncClient(reconnection=False, logger=False)
         self.serverData = serverData
         self.G = g
         self.lastAllEntities = 0
@@ -46,6 +46,9 @@ class Observer(object):
 
     def defaultHandler(self, data = None):
         return
+    
+    def anyHandler(self, event, data = None):
+        print(f"Event: {event}\nData: {data}")
 
     def actionHandler(self, data):
         if data.get('instant', False):

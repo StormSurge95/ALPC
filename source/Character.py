@@ -11,12 +11,6 @@ import re
 import sys
 import math
 
-logger = logging.getLogger(__name__)
-handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
-handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
-logger.addHandler(handler)
-
 class Character(Observer):
 
     def __init__(self, userID: str, userAuth: str, characterID: str, g: dict, serverData: dict):
@@ -285,7 +279,7 @@ class Character(Observer):
         return
 
     async def connect(self) -> bool | None:
-        await super().connect(False, False)
+        await super(Character, self).connect(False, False)
 
         self.socket.on('disconnect', self.disconnectHandler)
         self.socket.on('disconnect_reason', self.disconnectReasonHandler)
@@ -307,27 +301,24 @@ class Character(Observer):
             connected = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not connected.done():
-                    self.socket.on('start', self.startHandler)
-                    self.socket.on('game_error', self.gameErrorHandler)
-                    self.socket.on('disconnect_reason', self.disconnectReasonHandler)
+                    self.socket.off('start', startCheck)
+                    self.socket.off('game_error', failCheck)
+                    self.socket.off('disconnect_reason', failCheck2)
                     connected.set_exception(Exception(reason))
             def resolve(value):
                 if not connected.done():
-                    self.socket.on('start', self.startHandler)
-                    self.socket.on('game_error', self.gameErrorHandler)
-                    self.socket.on('disconnect_reason', self.disconnectReasonHandler)
+                    self.socket.off('start', startCheck)
+                    self.socket.off('game_error', failCheck)
+                    self.socket.off('disconnect_reason', failCheck2)
                     connected.set_result(value)
             async def failCheck(data):
-                self.gameErrorHandler(data)
                 if type(data) == str:
                     reject(f'Failed to connect: {data}')
                 else:
                     reject(f'Failed to connect: {data["message"]}')
             async def failCheck2(data):
-                self.disconnectReasonHandler(data)
                 reject(f'Failed to connect: {data}')
             async def startCheck(data):
-                self.startHandler(data)
                 await self.updateLoop()
                 resolve(True)
 
@@ -347,6 +338,7 @@ class Character(Observer):
 
         if self.socket:
             await self.socket.disconnect()
+            await self.socket.eio.http.close()
 
         self.ready = False
 
@@ -362,16 +354,15 @@ class Character(Observer):
             entitiesData = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not entitiesData.done():
-                    self.socket.on('entities', self.entitiesHandler)
+                    self.socket.off('entities', checkEntitiesEvent)
                     entitiesData.set_exception(Exception(reason))
             def resolve(value):
                 if not entitiesData.done():
-                    self.socket.on('entities', self.entitiesHandler)
+                    self.socket.off('entities', checkEntitiesEvent)
                     entitiesData.set_result(value)
             def checkEntitiesEvent(data):
                 if data['type'] == 'all':
                     resolve(data)
-                self.entitiesHandler(data)
 
             
             Tools.setTimeout(reject, Constants.TIMEOUT, f'requestEntitiesData timeout ({Constants.TIMEOUT}s)')
@@ -390,14 +381,17 @@ class Character(Observer):
 
         async def playerDataFn():
             playerData = asyncio.get_event_loop().create_future()
+            def resolve(value):
+                if not playerData.done():
+                    self.socket.off('player', checkPlayerEvent)
+                    playerData.set_result(value)
             def checkPlayerEvent(data):
-                self.playerHandler(data)
                 if data.get('s', {}).get('typing', False):
-                    playerData.set_result(data)
-                    self.socket.on('player', self.playerHandler)
+                    resolve(data)
 
             def reject(reason):
                 if not playerData.done():
+                    self.socket.off('player', checkPlayerEvent)
                     playerData.set_exception(Exception(reason))
             Tools.setTimeout(reject, Constants.TIMEOUT, f'requestPlayerData timeout ({Constants.TIMEOUT}s)')
             self.socket.on('player', checkPlayerEvent)
@@ -415,10 +409,14 @@ class Character(Observer):
 
         async def friendReqFn():
             friended = asyncio.get_event_loop().create_future()
+            def resolve(value):
+                if not friended.done():
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('friend', successCheck)
+                    friended.set_result(value)
             def successCheck(data):
                 if data['event'] == 'new':
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    friended.set_result(data)
+                    resolve(data)
 
             def failCheck(data):
                 if type(data) == str:
@@ -427,7 +425,8 @@ class Character(Observer):
 
             def reject(reason):
                 if not friended.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('friend', successCheck)
                     friended.set_exception(Exception(reason))
 
             Tools.setTimeout(reject, Constants.TIMEOUT, f'acceptFriendRequest timeout ({Constants.TIMEOUT}s)')
@@ -447,15 +446,17 @@ class Character(Observer):
 
         async def magiportFn():
             acceptedMagiport = asyncio.get_event_loop().create_future()
+            def reject(reason=None):
+                if not acceptedMagiport.done():
+                    self.socket.off('new_map', magiportCheck)
+                    acceptedMagiport.set_exception(Exception(reason))
+            def resolve(value=None):
+                if not acceptedMagiport.done():
+                    self.socket.off('new_map', magiportCheck)
+                    acceptedMagiport.set_result(value)
             def magiportCheck(data):
                 if data.get('effect', "") == 'magiport':
-                    self.socket.on('new_map', self.newMapHandler)
-                    acceptedMagiport.set_result({'map': data['name'], 'x': data['x'], 'y': data['y'] })
-
-            def reject(reason):
-                if not acceptedMagiport.done():
-                    self.socket.on('new_map', self.newMapHandler)
-                    acceptedMagiport.set_exception(Exception(reason))
+                    resolve({'map': data['name'], 'x': data['x'], 'y': data['y'] })
 
             Tools.setTimeout(reject, Constants.TIMEOUT, f'acceptMagiport timeout ({Constants.TIMEOUT}s)')
             self.socket.on('new_map', magiportCheck)
@@ -474,9 +475,7 @@ class Character(Observer):
             acceptedInvite = asyncio.get_event_loop().create_future()
             def partyCheck(data):
                 if (Tools.hasKey(data, 'list')) and (Tools.hasKey(data['list'], self.id)) and (Tools.hasKey(data['list'], id)):
-                    self.socket.on('party_update', self.defaultHandler)
-                    self.socket.on('game_log', self.defaultHandler)
-                    acceptedInvite.set_result(data)
+                    resolve(data)
             
             def unableCheck(data):
                 if data == 'Invitation expired':
@@ -485,17 +484,20 @@ class Character(Observer):
                     reject(data)
                 elif data == 'Already partying':
                     if (self.id in self.partyData['list']) and (id in self.partyData['list']):
-                        self.socket.on('party_update', self.defaultHandler)
-                        self.socket.on('game_log', self.defaultHandler)
-                        acceptedInvite.set_result(self.partyData)
+                        resolve(self.partyData)
                     else:
                         reject(data)
             
             def reject(reason):
                 if not acceptedInvite.done():
-                    self.socket.on('party_update', self.defaultHandler)
-                    self.socket.on('game_log', self.defaultHandler)
+                    self.socket.off('party_update', partyCheck)
+                    self.socket.off('game_log', unableCheck)
                     acceptedInvite.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not acceptedInvite.done():
+                    self.socket.off('party_update', partyCheck)
+                    self.socket.off('game_log', unableCheck)
+                    acceptedInvite.set_result(value)
             
             Tools.setTimeout(reject, Constants.Timeout, f'acceptPartyInvite timeout ({Constants.TIMEOUT}s)')
             self.socket.on('party_update', partyCheck)
@@ -515,13 +517,16 @@ class Character(Observer):
             acceptedRequest = asyncio.get_event_loop().create_future()
             def partyCheck(data):
                 if (data.get('list', False)) and (self.id in data['list']) and (id in data['list']):
-                    self.socket.on('party_update', self.defaultHandler)
-                    acceptedRequest.set_result(data)
+                    resolve(data)
                 
             def reject(reason):
                 if not acceptedRequest.done():
-                    self.socket.on('party_update', self.defaultHandler)
+                    self.socket.off('party_update', partyCheck)
                     acceptedRequest.set_exception(Exception(reason))
+            def resolve(value=None):
+                if not acceptedRequest.done():
+                    self.socket.off('party_update', partyCheck)
+                    acceptedRequest.set_result(value)
             
             Tools.setTimeout(reject, Constants.TIMEOUT, f'acceptPartyRequest timeout {Constants.TIMEOUT}s)')
             self.socket.on('party_update', partyCheck)
@@ -539,24 +544,23 @@ class Character(Observer):
             attackStarted = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not attackStarted.done():
-                    self.socket.on('action', self.defaultHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('notthere', self.defaultHandler)
-                    self.socket.on('death', self.defaultHandler)
+                    self.socket.off('action', attackCheck)
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('notthere', failCheck2)
+                    self.socket.off('death', deathCheck)
                     attackStarted.set_exception(Exception(reason))
             def resolve(value):
                 if not attackStarted.done():
-                    self.socket.on('action', self.defaultHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('notthere', self.defaultHandler)
-                    self.socket.on('death', self.defaultHandler)
+                    self.socket.off('action', attackCheck)
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('notthere', failCheck2)
+                    self.socket.off('death', deathCheck)
                     attackStarted.set_result(value)
             def deathCheck(data):
                 if data['id'] == id:
                     reject(f'Entity {id} not found')
                 return
             def failCheck(data):
-                self.gameResponseHandler(data)
                 if type(data) == dict:
                     if data.get('response', None) == 'disabled':
                         reject(f'Attack on {id} failed (disabled).')
@@ -598,16 +602,15 @@ class Character(Observer):
             itemReceived = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not itemReceived.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.off('player', buyCheck1)
+                    self.socket.off('game_response', buyCheck2)
                     itemReceived.set_exception(Exception(reason))
             def resolve(value):
                 if not itemReceived.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.off('player', buyCheck1)
+                    self.socket.off('game_response', buyCheck2)
                     itemReceived.set_result(value)
             def buyCheck1(data):
-                self.playerHandler(data)
                 if not data.get('hitchhikers', False):
                     return
                 for hitchhiker in data['hitchhikers'].values():
@@ -617,7 +620,6 @@ class Character(Observer):
                             resolve(data['num'])
                 return
             def buyCheck2(data):
-                self.gameResponseHandler(data)
                 if data == 'buy_cant_npc':
                     reject(f'Cannot buy {quantity} {itemName}(s) from an NPC')
                 elif data == 'buy_cant_space':
@@ -663,13 +665,13 @@ class Character(Observer):
             itemReceived = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not itemReceived.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.off('player', buyCheck)
+                    self.socket.off('game_response', failCheck)
                     itemReceived.set_exception(Exception(reason))
             def resolve(value):
                 if not itemReceived.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.off('player', buyCheck)
+                    self.socket.off('game_response', failCheck)
                     itemReceived.set_result(value)
             def buyCheck(data):
                 numNow = self.countItem(itemName, data['items'])
@@ -726,11 +728,11 @@ class Character(Observer):
             itemBought = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not itemBought.done():
-                    self.socket.on('ui', self.defaultHandler)
+                    self.socket.off('ui', buyCheck)
                     itemBought.set_exception(Exception(reason))
             def resolve(value):
                 if not itemBought.done():
-                    self.socket.on('ui', self.defaultHandler)
+                    self.socket.off('ui', buyCheck)
                     itemBought.set_result(value)
             def buyCheck(data):
                 if (data['type'] == '+$$') and (data['seller'] == id) and (data['buyer'] == self.id) and (data['slot'] == slot):
@@ -760,20 +762,20 @@ class Character(Observer):
             bought = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not bought.done():
-                    self.socket.on('game_log', self.defaultHandler)
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('game_log', failCheck)
+                    self.socket.off('player', successCheck)
                     bought.set_exception(Exception(reason))
             def resolve(value):
                 if not bought.done():
-                    self.socket.on('game_log', self.defaultHandler)
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('game_log', failCheck)
+                    self.socket.off('player', successCheck)
                     bought.set_result(value)
             def failCheck(message):
                 if message == 'Item gone':
                     reject(f"{item['name']} is no longer available from Ponty.")
             def successCheck(data):
                 numNow = self.countItem(item['name'], data['items'])
-                if ((item.get('q', False)) and (numNow == numBefore + item['q'])) or (numNow == numBefore + 1):
+                if ((Tools.hasKey(item, 'q')) and (numNow == numBefore + item['q'])) or (numNow == numBefore + 1):
                     resolve(None)
             Tools.setTimeout(reject, Constants.TIMEOUT * 5, f"buyFromPonty timeout ({Constants.TIMEOUT * 5}s)")
             self.socket.on('game_log', failCheck)
@@ -1134,14 +1136,13 @@ class Character(Observer):
             closed = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not closed.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', checkStand)
                     closed.set_exception(Exception(reason))
             def resolve(value):
                 if not closed.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', checkStand)
                     closed.set_result(value)
             def checkStand(data):
-                self.playerHandler(data)
                 if not Tools.hasKey(data, 'stand'):
                     resolve(None)
             Tools.setTimeout(reject, Constants.TIMEOUT, f'closeMerchantStand timeout ({Constants.TIMEOUT}s)')
@@ -1180,14 +1181,14 @@ class Character(Observer):
             compoundComplete = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not compoundComplete.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('game_response', gameResponseCheck)
+                    self.socket.off('player', playerCheck)
                     compoundComplete.set_exception(Exception(reason))
                 return
             def resolve(value = None):
                 if not compoundComplete.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('game_response', gameResponseCheck)
+                    self.socket.off('player', playerCheck)
                     compoundComplete.set_result(value)
                 return
             def playerCheck(data):
@@ -1255,14 +1256,13 @@ class Character(Observer):
                 crafted = asyncio.get_event_loop().create_future()
                 def reject(reason):
                     if not crafted.done():
-                        self.socket.on('game_response', self.gameResponseHandler)
+                        self.socket.off('game_response', successCheck)
                         crafted.set_exception(Exception(reason))
                 def resolve(value = None):
                     if not crafted.done():
-                        self.socket.on('game_response', self.gameResponseHandler)
+                        self.socket.off('game_response', successCheck)
                         crafted.set_result(value)
                 def successCheck(data):
-                    self.gameResponseHandler(data)
                     if type(data) == dict:
                         if data['response'] == 'craft' and data['name'] == item:
                             resolve()
@@ -1359,11 +1359,11 @@ class Character(Observer):
             swapped = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not swapped.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', checkDeposit)
                     swapped.set_exception(Exception(reason))
             def resolve(value = None):
                 if not swapped.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', checkDeposit)
                     swapped.set_result(value)
             def checkDeposit(data):
                 if Tools.hasKey(data, 'user'):
@@ -1373,7 +1373,6 @@ class Character(Observer):
                         newBankItemCount = self.countItem(item['name'], data['user'][bankPack])
                         if ((Tools.hasKey(item, 'q') and newBankItemCount == (bankItemCount + item['q'])) or (not Tools.hasKey(item, 'q') and newBankItemCount == (bankItemCount +1))):
                             resolve()
-                self.playerHandler(data)
             Tools.setTimeout(reject, Constants.TIMEOUT, f'depositItem timeout ({Constants.TIMEOUT}s)')
             self.socket.on('player', checkDeposit)
             await self.socket.emit('bank', { 'inv': inventoryPos, 'operation': 'swap', 'pack': bankPack, 'str': bankSlot })
@@ -1385,20 +1384,20 @@ class Character(Observer):
     async def emote(self, emotionName) -> None:
         if not self.ready:
             raise Exception("We aren't ready yet [emote].")
-        if not Tools.hasKey(self.emx, emotionName):
+        if not hasattr(self, 'emx') or not Tools.hasKey(self.emx, emotionName):
             raise Exception(f"We don't have the emotion '{emotionName}'")
         
         async def emoteFn():
             emoted = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not emoted.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('emotion', self.defaultHandler)
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('emotion', successCheck)
                     emoted.set_exception(Exception(reason))
             def resolve(value = None):
                 if not emoted.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('emotion', self.defaultHandler)
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('emotion', successCheck)
                     emoted.set_result(value)
             def failCheck(data):
                 if type(data) == str:
@@ -1406,7 +1405,6 @@ class Character(Observer):
                         reject('Emotion is on cooldown?')
                     elif data == 'emotion_cant':
                         reject('Emotion is...blocked..?')
-                self.gameResponseHandler(data)
             def successCheck(data):
                 if data['name'] == emotionName and data['player'] == self.id:
                     resolve()
@@ -1442,25 +1440,23 @@ class Character(Observer):
             enterComplete = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not enterComplete.done():
-                    self.socket.on('new_map', self.newMapHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.off('new_map', enterCheck)
+                    self.socket.off('game_response', failCheck)
                     enterComplete.set_exception(Exception(reason))
             def resolve(value = None):
                 if not enterComplete.done():
-                    self.socket.on('new_map', self.newMapHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.off('new_map', enterCheck)
+                    self.socket.off('game_response', failCheck)
                     enterComplete.set_result(value)
             def enterCheck(data):
                 if data['name'] == map:
                     resolve()
                 else:
                     reject(f"We are not in {data['name']}, but we should be in {map}.")
-                self.newMapHandler(data)
             def failCheck(data):
                 if type(data) == str:
                     if data == 'transport_cant_item':
                         reject(f"We don't have the required item to enter {map}.")
-                self.gameResponseHandler(data)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"We don't have the required item to enter {map}.")
             self.socket.on('new_map', enterCheck)
             self.socket.on('game_response', failCheck)
@@ -1482,13 +1478,13 @@ class Character(Observer):
             equipFinished = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not equipFinished.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('disappearing_text', self.defaultHandler)
+                    self.socket.off('player', equipCheck)
+                    self.socket.off('disappearing_text', cantEquipCheck)
                     equipFinished.set_exception(Exception(reason))
             def resolve(value = None):
                 if not equipFinished.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('disappearing_text', self.defaultHandler)
+                    self.socket.off('player', equipCheck)
+                    self.socket.off('disappearing_text', cantEquipCheck)
                     equipFinished.set_result(value)
             def equipCheck(data):
                 if equipSlot != None:
@@ -1496,7 +1492,7 @@ class Character(Observer):
                     if (item != None) and (item['name'] == iInfo['name']) and (item['level'] == iInfo['level']) and (item['p'] == iInfo['p']):
                         resolve()
                 else:
-                    for slot in data['slots'].keys():
+                    for slot in data['slots']:
                         item = data['slots'][slot]
                         if (item != None) and (item['name'] == iInfo['name']):
                             resolve()
@@ -1529,13 +1525,13 @@ class Character(Observer):
             exchangeFinished = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not exchangeFinished.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.off('player', completeCheck)
+                    self.socket.off('game_response', bankCheck)
                     exchangeFinished.set_exception(Exception(reason))
             def resolve(value = None):
                 if not exchangeFinished.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('game_response', self.gameResponseHandler)
+                    self.socket.off('player', completeCheck)
+                    self.socket.off('game_response', bankCheck)
                     exchangeFinished.set_result(value)
             def completeCheck(data):
                 if (not startedExchange) and Tools.hasKey(data['q'], 'exchange'):
@@ -1543,7 +1539,6 @@ class Character(Observer):
                     return
                 if startedExchange and not Tools.hasKey(data['q'], 'exchange'):
                     resolve()
-                self.playerHandler(data)
             def bankCheck(data):
                 if type(data) == dict and data['response'] == 'bank_restrictions' and data['place'] == 'upgrade':
                     reject("You can't exchange items in the bank.")
@@ -1552,7 +1547,6 @@ class Character(Observer):
                         reject("We don't have enough items to exchange.")
                     elif data == 'exchange_existing':
                         reject("We are already exchanging something.")
-                self.gameResponseHandler(data)
             Tools.setTimeout(reject, Constants.TIMEOUT * 60, f"exchange timeout ({Constants.TIMEOUT * 60}s)")
             self.socket.on('player', completeCheck)
             self.socket.on('game_response', bankCheck)
@@ -1584,16 +1578,15 @@ class Character(Observer):
             questFinished = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not questFinished.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', successCheck)
                     questFinished.set_exception(Exception(reason))
             def resolve(value = None):
                 if not questFinished.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', successCheck)
                     questFinished.set_result(value)
             def successCheck(data):
                 if (not Tools.hasKey(data, 's')) or (not Tools.hasKey(data['s'], 'monsterhunt')):
                     resolve()
-                self.playerHandler(data)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"finishMonsterHuntQuest timeout ({Constants.TIMEOUT}s)")
             self.socket.on('player', successCheck)
             await self.socket.emit('monsterhunt')
@@ -1727,22 +1720,20 @@ class Character(Observer):
             questGot = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not questGot.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('player', successCheck)
                     questGot.set_exception(Exception(reason))
             def resolve(value = None):
                 if not questGot.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('player', successCheck)
                     questGot.set_result(Exception(value))
             def failCheck(data):
                 if data == 'ecu_get_closer':
                     reject("Too far away from Monster Hunt NPC.")
                 elif data == 'monsterhunt_merchant':
                     reject("Merchants can't do Monster Hunts.")
-                self.gameResponseHandler(data)
             def successCheck(data):
-                self.playerHandler(data)
                 if not Tools.hasKey(data, 'hitchhikers'): return
                 for hitchhiker in data['hitchhikers'].values():
                     if hitchhiker[0] == 'game_response' and hitchhiker[1] == 'monsterhunt_started':
@@ -1765,11 +1756,11 @@ class Character(Observer):
             playersData = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not playersData.done():
-                    self.socket.on('players', self.defaultHandler)
+                    self.socket.off('players', dataCheck)
                     playersData.set_exception(Exception(reason))
             def resolve(value = None):
                 if not playersData.done():
-                    self.socket.on('players', self.defaultHandler)
+                    self.socket.off('players', dataCheck)
                     playersData.set_result(value)
             def dataCheck(data):
                 resolve(data)
@@ -1788,18 +1779,17 @@ class Character(Observer):
             pontyItems = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not pontyItems.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('secondhands', self.defaultHandler)
+                    self.socket.off('game_response', distanceCheck)
+                    self.socket.off('secondhands', secondhandsItems)
                     pontyItems.set_exception(Exception(reason))
             def resolve(value = None):
                 if not pontyItems.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('secondhands', self.defaultHandler)
+                    self.socket.off('game_response', distanceCheck)
+                    self.socket.off('secondhands', secondhandsItems)
                     pontyItems.set_result(value)
             def distanceCheck(data):
                 if data == 'buy_get_closer':
                     reject("Too far away from secondhands NPC.")
-                self.gameResponseHandler(data)
             def secondhandsItems(data):
                 resolve(data)
             Tools.setTimeout(reject, Constants.TIMEOUT * 5, f"getPontyItems timeout ({Constants.TIMEOUT * 5}s)")
@@ -1824,11 +1814,11 @@ class Character(Observer):
             gotData = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not gotData.done():
-                    self.socket.on('tracker', self.defaultHandler)
+                    self.socket.off('tracker', gotCheck)
                     gotData.set_exception(Exception(reason))
             def resolve(value = None):
                 if not gotData.done():
-                    self.socket.on('tracker', self.defaultHandler)
+                    self.socket.off('tracker', gotCheck)
                     gotData.set_result(value)
             def gotCheck(data):
                 resolve(data)
@@ -1856,16 +1846,15 @@ class Character(Observer):
             kicked = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not kicked.done():
-                    self.socket.on('party_update', self.partyUpdateHandler)
+                    self.socket.off('party_update', kickedCheck)
                     kicked.set_exception(Exception(reason))
             def resolve(value = None):
                 if not kicked.done():
-                    self.socket.on('party_update', self.partyUpdateHandler)
+                    self.socket.off('party_update', kickedCheck)
                     kicked.set_result(value)
             def kickedCheck(data):
                 if (not Tools.hasKey(data, 'list')) or (toKick not in data['list']):
                     resolve()
-                self.partyUpdateHandler(data)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"kickPartyMember timeout ({Constants.TIMEOUT}s)")
             self.socket.on('party_update', kickedCheck)
             await self.socket.emit('party', { 'event': 'kick', 'name': toKick })
@@ -1879,19 +1868,18 @@ class Character(Observer):
         async def leaveFn():
             leaveComplete = asyncio.get_event_loop().create_future()
             def reject(reason = None):
-                self.socket.on('new_map', self.newMapHandler)
-                self.socket.on('game_response', self.gameResponseHandler)
+                self.socket.off('new_map', leaveCheck)
+                self.socket.off('game_response', failCheck)
                 leaveComplete.set_exception(Exception(reason))
             def resolve(value = None):
-                self.socket.on('new_map', self.newMapHandler)
-                self.socket.on('game_response', self.gameResponseHandler)
+                self.socket.off('new_map', leaveCheck)
+                self.socket.off('game_response', failCheck)
                 leaveComplete.set_result(value)
             def leaveCheck(data):
                 if data['name'] == 'main':
                     resolve()
                 else:
                     reject(f"We are now in {data['name']}, but we should be in main")
-                self.newMapHandler(data)
             def failCheck(data):
                 if type(data) == str:
                     if data == 'cant_escape':
@@ -1924,29 +1912,28 @@ class Character(Observer):
         if self.x == to['x'] and self.y == to['y']: return { 'map': self.map, 'x': self.x, 'y': self.y }
 
         async def moveFn():
-            global timeToFinishMove
             timeToFinishMove = 0.001 + self.ping + Tools.distance(self, { 'x': to['x'], 'y': to['y'] }) / self.speed
-            global timeout
             moveFinished = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not moveFinished.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', checkPlayer)
                     moveFinished.set_exception(Exception(reason))
             def resolve(value = None):
                 if not moveFinished.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', checkPlayer)
                     moveFinished.set_result(value)
             async def checkPlayer(data):
+                nonlocal timeout
+                nonlocal timeToFinishMove
                 if resolveOnStart:
                     if data['going_x'] == to['x'] and data['going_y'] == to['y']:
                         Tools.clearTimeout(timeout)
                         resolve({ 'map': self.map, 'x': data['x'], 'y': data['y'] })
-                    self.playerHandler(data)
                     return
                 if not data['moving'] or data['going_x'] != to['x'] or data['going_y'] != to['y']:
                     try:
                         newData = await self.requestPlayerData()
-                        if not newData['moving'] or newData['going_x'] != to['x'] or newData['going_y'] != to['y']:
+                        if newData != None and (not newData['moving'] or newData['going_x'] != to['x'] or newData['going_y'] != to['y']):
                             Tools.clearTimeout(timeout)
                             reject(f"move to ({to['x']}, {to['y']}) failed")
                     except Exception as e:
@@ -1955,8 +1942,7 @@ class Character(Observer):
                     timeToFinishMove = 0.001 + self.ping + Tools.distance(self, { 'x': data['going_x'], 'y': data['going_y'] }) / data['speed']
                     Tools.clearTimeout(timeout)
                     timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
-                self.playerHandler(data)
-
+            
             def checkPosition():
                 if resolveOnStart:
                     resolve({ 'map': self.map, 'x': self.x, 'y': self.y })
@@ -1990,11 +1976,11 @@ class Character(Observer):
             chestOpened = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not chestOpened.done():
-                    self.socket.on('chest_opened', self.defaultHandler)
+                    self.socket.off('chest_opened', openCheck)
                     chestOpened.set_exception(Exception(reason))
             def resolve(value = None):
                 if not chestOpened.done():
-                    self.socket.on('chest_opened', self.defaultHandler)
+                    self.socket.off('chest_opened', openCheck)
                     chestOpened.set_result(value)
             def openCheck(data):
                 if data['id'] == id:
@@ -2021,16 +2007,15 @@ class Character(Observer):
             opened = asyncio.get_event_loop().create_future()
             def reject(reason=None):
                 if not opened.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', checkStand)
                     opened.set_exception(Exception(reason))
             def resolve(value=None):
                 if not opened.done():
-                    self.socket.on('player', self.playerHandler)
+                    self.socket.off('player', checkStand)
                     opened.set_result(value)
             def checkStand(data):
                 if Tools.hasKey(data, 'stand') and data['stand']:
                     resolve()
-                self.playerHandler(data)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"openMerchantStand timeout ({Constants.TIMEOUT}s)")
             self.socket.on('player', checkStand)
             await self.socket.emit('merchant', { 'num': stand })
@@ -2046,18 +2031,17 @@ class Character(Observer):
             regenReceived = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not regenReceived.done():
-                    self.socket.on('eval', self.evalHandler)
-                    self.socket.on('disappearing_text', self.defaultHandler)
+                    self.socket.off('eval', regenCheck)
+                    self.socket.off('disappearing_text', failCheck)
                     regenReceived.set_exception(Exception(reason))
             def resolve(value = None):
                 if not regenReceived.done():
-                    self.socket.on('eval', self.evalHandler)
-                    self.socket.on('disappearing_text', self.defaultHandler)
+                    self.socket.off('eval', regenCheck)
+                    self.socket.off('disappearing_text', failCheck)
                     regenReceived.set_result(value)
             def regenCheck(data):
                 if Tools.hasKey(data, 'code') and ('pot_timeout' in data['code']):
                     resolve()
-                self.evalHandler(data)
             def failCheck(data):
                 if data['id'] == self.id and data['message'] == 'NOT READY':
                     reject("regenHP is on cooldown")
@@ -2077,18 +2061,17 @@ class Character(Observer):
             regenReceived = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not regenReceived.done():
-                    self.socket.on('eval', self.evalHandler)
-                    self.socket.on('disappearing_text', self.defaultHandler)
+                    self.socket.off('eval', regenCheck)
+                    self.socket.off('disappearing_text', failCheck)
                     regenReceived.set_exception(Exception(reason))
             def resolve(value = None):
                 if not regenReceived.done():
-                    self.socket.on('eval', self.evalHandler)
-                    self.socket.on('disappearing_text', self.defaultHandler)
+                    self.socket.off('eval', regenCheck)
+                    self.socket.off('disappearing_text', failCheck)
                     regenReceived.set_result(value)
             def regenCheck(data):
                 if Tools.hasKey(data, 'code') and ('pot_timeout' in data['code']):
                     resolve()
-                self.evalHandler(data)
             def failCheck(data):
                 if data['id'] == self.id and data['message'] == 'NOT READY':
                     reject("regenHP is on cooldown")
@@ -2109,18 +2092,17 @@ class Character(Observer):
             respawned = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not respawned.done():
-                    self.socket.on('new_map', self.newMapHandler)
-                    self.socket.on('game_log', self.defaultHandler)
+                    self.socket.off('new_map', respawnCheck)
+                    self.socket.off('game_log', failCheck)
                     respawned.set_exception(Exception(reason))
             def resolve(value = None):
                 if not respawned.done():
-                    self.socket.on('new_map', self.newMapHandler)
-                    self.socket.on('game_log', self.defaultHandler)
+                    self.socket.off('new_map', respawnCheck)
+                    self.socket.off('game_log', failCheck)
                     respawned.set_result(value)
             def respawnCheck(data):
                 if Tools.hasKey(data, 'effect') and data['effect'] == 1:
                     resolve({ 'map': data['name'], 'x': data['x'], 'y': data['y'] })
-                self.newMapHandler(data)
             def failCheck(data):
                 if data == "Can't respawn yet.":
                     reject(data)
@@ -2148,20 +2130,20 @@ class Character(Observer):
             def reject(reason = None):
                 nonlocal scared
                 if not scared.done():
-                    self.socket.on('ui', self.defaultHandler)
-                    self.socket.on('eval', self.evalHandler)
+                    self.socket.off('ui', idsCheck)
+                    self.socket.off('eval', cooldownCheck)
                     scared.set_exception(Exception(reason))
             def resolve(value = None):
                 nonlocal scared
                 if not scared.done():
-                    self.socket.on('ui', self.defaultHandler)
-                    self.socket.on('eval', self.evalHandler)
+                    self.socket.off('ui', idsCheck)
+                    self.socket.off('eval', cooldownCheck)
                     scared.set_result(value)
             def idsCheck(data):
                 nonlocal ids
                 if data['type'] == 'scare':
                     ids = data['ids']
-                    self.socket.on('ui', self.defaultHandler)
+                    self.socket.off('ui', idsCheck)
             def cooldownCheck(data):
                 nonlocal ids
                 match = re.search('skill_timeout\s*\(\s*[\'"]scare[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
@@ -2177,28 +2159,236 @@ class Character(Observer):
         return await Character.tryExcept(scareFn)
 
     async def sell(self, itemPos: int, quantity: int = 1) -> bool:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [sell].")
+        if self.map in ['bank', 'bank_b', 'bank_u']:
+            raise Exception("We can't sell items in the bank.")
+        item = self.items[itemPos]
+        if item == None:
+            raise Exception(f"We have no item in inventory slot {itemPos} to sell.")
+        if Tools.hasKey(item, 'l'):
+            raise Exception(f"We can't sell {item['name']}, because it is locked.")
+        
+        async def sellFn():
+            sold = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not sold.done():
+                    self.socket.off('ui', soldCheck)
+                    self.socket.off('game_response', failCheck)
+                    sold.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not sold.done():
+                    self.socket.off('ui', soldCheck)
+                    self.socket.off('game_response', failCheck)
+                    sold.set_result(value)
+            def soldCheck(data):
+                if data.get('type', False) and data['name'] == self.id and int(data['num']) == itemPos:
+                    if Tools.hasKey(data.get('item', {}), 'q') and quantity != data['item']['q']:
+                        reject(f"Attempted to sell {quantity} {data['item']['name']}(s), but actually sold {data['item']['q']}.")
+                    else:
+                        resolve(True)
+            def failCheck(data):
+                if type(data) == str:
+                    if data == 'item_locked':
+                        reject(f"We can't sell {item['name']}, because it is locked.")
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"sell timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('ui', soldCheck)
+            self.socket.on('game_response', failCheck)
+            await self.socket.emit('sell', { 'num': itemPos, 'quantity': quantity })
+            while not sold.done():
+                await asyncio.sleep(Constants.WAIT)
+            return sold.result()
+        return Character.tryExcept(sellFn)
 
     async def sellToMerchant(self, id: str, slot: str, rid: str, q: int) -> None:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [sellToMerchant].")
+        
+        # Check if the player buying the item is still valid
+        player = self.players.get(id, None)
+        if player == None:
+            raise Exception(f"{id} is not nearby.")
+        
+        item = player.slots[slot]
+        if item == None:
+            raise Exception(f"{id} has no item in slot {slot}")
+        if not Tools.hasKey(item, 'b'):
+            raise Exception(f"{id}'s slot {slot} is not a buy request.")
+        
+        ourItem = self.locateItem(item['name'], self.items, { 'level': item['level'], 'locked': False })
+        if ourItem == None:
+            raise Exception(f"We do not have a {item['name']} to sell to {id}")
+        
+        async def sellFn():
+            sold = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not sold.done():
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('ui', soldCheck)
+                    sold.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not sold.done():
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('ui', soldCheck)
+                    sold.set_result(value)
+            def soldCheck(data):
+                if data['type'] == "+$$" and data['seller'] == self.id and data['buyer'] == id:
+                    resolve()
+            def failCheck(data):
+                if type(data) == str:
+                    if data == 'trade_bspace':
+                        reject(f"{id} doesn't have enough space, so we can't sell items.")
+            
+            #TODO: Add a check that the merchant has enough money
+
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"sellToMerchant timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('ui', soldCheck)
+            self.socket.on('game_response', failCheck)
+            await self.socket.emit('trade_sell', { 'id': id, 'q': q, 'rid': rid, 'slot': slot })
+            while not sold.done():
+                await asyncio.sleep(Constants.WAIT)
+            return sold.result()
+        return await Character.tryExcept(sellFn)
 
     async def sendCM(self, to: list[str], message: str) -> None:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [sendCM].")
+        
+        await self.socket.emit('cm', { 'message': message, 'to': to })
 
-    async def sendMail(self, to: str, subject: str, message: str, item: bool = False) -> None:
-        pass
+    async def sendMail(self, to: str, subject: str, message: str, item = False) -> None:
+        self.socket.emit('mail', { 'item': item, 'message': message, 'subject': subject, 'to': to })
 
     async def sendPM(self, to: str, message: str) -> bool:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [sendPM].")
+        
+        async def sendFn():
+            sent = asyncio.get_event_loop().create_future()
+            isReceived = False
+            def reject(reason: str = None):
+                if not sent.done():
+                    self.socket.off('pm', sentCheck)
+                    sent.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not sent.done():
+                    self.socket.off('pm', sentCheck)
+                    sent.set_result(value)
+            def sentCheck(data):
+                if data['message'] == message and data['owner'] == self.id and data['to'] == to:
+                    nonlocal isReceived
+                    isReceived = True
+                if data['message'] == '(FAILED)' and data['owner'] == self.id and data['to'] == to:
+                    reject(f'Failed sending a PM to {to}.')
+            def timeoutFn():
+                nonlocal isReceived
+                if isReceived:
+                    resolve(True)
+                else:
+                    reject('send timeout (5s)')
+            Tools.setTimeout(timeoutFn, 5)
+            self.socket.on('pm', sentCheck)
+            await self.socket.emit('say', { 'message': message, 'name': to })
+            while not sent.done():
+                await asyncio.sleep(Constants.WAIT)
+            return sent.result()
+        return await Character.tryExcept(sendFn)
 
     async def say(self, message: str) -> None:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [say].")
+        
+        async def sentFn():
+            sent = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not sent.done():
+                    self.socket.off('chat_log', sentCheck)
+                    self.socket.off('game_error', failCheck)
+                    sent.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not sent.done():
+                    self.socket.off('chat_log', sentCheck)
+                    self.socket.off('game_error', failCheck)
+                    sent.set_result(value)
+            def sentCheck(data):
+                if data['message'] == message and data['owner'] == self.id:
+                    resolve()
+            def failCheck(data):
+                if data == "You can't chat this fast.":
+                    reject("You can't chat this fast.")
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"say timeout ({Constants.TIMEOUT})")
+            self.socket.on('chat_log', sentCheck)
+            self.socket.on('game_error', failCheck)
+            await self.socket.emit('say', { 'message': message })
+            while not sent.done():
+                await asyncio.sleep(Constants.WAIT)
+            return sent.result()
+        return await Character.tryExcept(sentFn)
 
     async def sendFriendRequest(self, id: str) -> None:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [sendFriendRequest].")
+        
+        async def friendRequestFn():
+            requestSent = asyncio.get_event_loop().create_future()
+            def reject(reason=None):
+                nonlocal requestSent
+                if not requestSent.done():
+                    self.socket.off('game_response', check)
+                    requestSent.set_exception(Exception(reason))
+            def resolve(value=None):
+                nonlocal requestSent
+                if not requestSent.done():
+                    self.socket.off('game_response', check)
+                    requestSent.set_result(value)
+            def check(data):
+                if type(data) == str:
+                    if data == 'friend_already' or data == 'friend_rsent':
+                        resolve()
+                    elif data == 'friend_rleft':
+                        reject(f"{id} is not online on the same server.")
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"sendFriendRequest timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('game_response', check)
+            await self.socket.emit('friend', { 'event': 'request', 'name': id })
+            while not requestSent.done():
+                await asyncio.sleep(Constants.WAIT)
+            return requestSent.result()
+        return await Character.tryExcept(friendRequestFn)
 
     async def sendGold(self, to: str, amount: int) -> int:
-        pass
+        if not self.ready:
+            raise Exception("We aren't ready yet [sendGold].")
+        if self.gold == 0:
+            raise Exception("We have no gold to send.")
+        if not Tools.hasKey(self.players, to):
+            raise Exception(f"We can't se {to} nearby to send gold.")
+        if Tools.distance(self, self.players.get(to)) > Constants.NPC_INTERACTION_DISTANCE:
+            raise Exception(f"We are too far away from {to} to send gold.")
+
+        async def sendFn():
+            goldSent = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not goldSent.done():
+                    self.socket.off('game_response', sentCheck)
+                    goldSent.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not goldSent.done():
+                    self.socket.off('game_response', sentCheck)
+                    goldSent.set_result(value)
+            def sentCheck(data):
+                if data == 'trade_get_closer':
+                    reject(f"We are too far away from {to} to send gold.")
+                elif type(data) == dict and data['response'] == 'gold_sent' and data['name'] == to:
+                    if data['gold'] != amount:
+                        print(f"We wanted to send {to} {amount} gold, but we sent {data['gold']}.")
+                    resolve(data['gold'])
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"sendGold timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('game_response', sentCheck)
+            await self.socket.emit('send', { 'gold': amount, 'name': to })
+            while not goldSent.done():
+                await asyncio.sleep(Constants.WAIT)
+            return goldSent.result()
+        return await Character.tryExcept(sendFn)
 
     async def sendItem(self, to: str, inventoryPos: int, quantity: int = 1) -> None:
         pass
@@ -2214,13 +2404,15 @@ class Character(Observer):
 
     lastSmartMove = datetime.now()
     smartMoving = None
-    async def smartMove(self, to, *, avoidTownWarps: bool = False, getWithin: int = 0, useBlink: bool = False, costs: dict = { 'blink': None, 'town': None, 'transport': None }) -> dict[str, int | str]:
+    async def smartMove(self, to, *, avoidTownWarps: bool = False, getWithin: int = 0, useBlink: bool = False, costs: dict = None) -> dict[str, int | str]:
         if not self.ready:
             raise Exception("We aren't ready yet [smartMove].")
         
         if self.rip:
             raise Exception("We can't smartMove; we are dead.")
 
+        if costs == None:
+            costs = {}
         if (not Tools.hasKey(costs, 'blink')) or costs['blink'] == None:
             costs['blink'] = self.speed * 3.2 + 250
         if (not Tools.hasKey(costs, 'town')) or costs['town'] == None:
@@ -2449,20 +2641,19 @@ class Character(Observer):
             transportComplete = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not transportComplete.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('new_map', self.newMapHandler)
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('new_map', transportCheck)
                     transportComplete.set_exception(Exception(reason))
             def resolve(value = None):
                 if not transportComplete.done():
-                    self.socket.on('game_response', self.gameResponseHandler)
-                    self.socket.on('new_map', self.newMapHandler)
+                    self.socket.off('game_response', failCheck)
+                    self.socket.off('new_map', transportCheck)
                     transportComplete.set_result(value)
             def transportCheck(data):
                 if data['name'] == map:
                     resolve()
                 else:
                     reject(f"We are now in {data['name']}, but we should be in {map}")
-                self.newMapHandler(data)
             def failCheck(data):
                 if type(data) == dict:
                     if data['response'] == 'bank_opx' and data['reason'] == 'mounted':
@@ -2474,7 +2665,6 @@ class Character(Observer):
                         reject(f"We haven't unlocked the door to spawn {spawn} on {map}.")
                     elif data == 'transport_cant_reach':
                         reject(f"We are too far away from the door to spawn {spawn} on {map}.")
-                self.gameResponseHandler(data)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"transport timeout ({Constants.TIMEOUT}s)")
             self.socket.on('game_response', failCheck)
             self.socket.on('new_map', transportCheck)
@@ -2513,28 +2703,25 @@ class Character(Observer):
             def reject(reason = None):
                 nonlocal warpComplete
                 if not warpComplete.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('new_map', self.newMapHandler)
+                    self.socket.off('player', failCheck)
+                    self.socket.off('new_map', warpedCheck)
                     warpComplete.set_exception(Exception(reason))
             def resolve(value = None):
                 nonlocal warpComplete
                 if not warpComplete.done():
-                    self.socket.on('player', self.playerHandler)
-                    self.socket.on('new_map', self.newMapHandler)
+                    self.socket.off('player', failCheck)
+                    self.socket.off('new_map', warpedCheck)
                     warpComplete.set_result(value)
             def failCheck(data):
                 nonlocal startedWarp
                 if (not startedWarp) and (Tools.hasKey(data['c'], 'town')):
                     startedWarp = True
-                    self.playerHandler(data)
                     return
                 if startedWarp and not Tools.hasKey(data['c'], 'town'):
                     reject('warpToTown failed.')
-                    self.playerHandler(data)
             def warpedCheck(data):
                 if data['effect'] == 1:
                     resolve({ 'map': data['name'], 'x': data['x'], 'y': data['y'] })
-                    self.newMapHandler(data)
             def startFail():
                 nonlocal startedWarp
                 if not startedWarp:
