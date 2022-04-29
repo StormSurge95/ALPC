@@ -312,10 +312,10 @@ class Observer(object):
         return
 
     async def sendPing(self, log: bool=True):
-        pingID = str(self.pingNum)
-        self.pingNum += 1
-        self.pingMap[pingID] = { 'log': log, 'time': datetime.datetime.now() }
         async def pingFn():
+            pingID = str(self.pingNum)
+            self.pingNum += 1
+            self.pingMap[pingID] = { 'log': log, 'time': datetime.datetime.now() }
             pinged = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 nonlocal pinged
