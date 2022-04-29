@@ -56,15 +56,7 @@ class Tools:
         return (key in dic.keys())
     
     @staticmethod
-    def tryExcept(func, *args, **kwargs):
-        try:
-            return func(*args, **kwargs)
-        except Exception as e:
-            Tools.logger.exception(e)
-            return
-
-    @staticmethod
-    async def tryExceptA(func, *args, **kwargs):
+    async def tryExcept(func, *args, **kwargs):
         try:
             return await func(*args, **kwargs)
         except Exception as e:

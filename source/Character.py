@@ -1,6 +1,5 @@
 from functools import reduce
 import logging
-from pprint import pprint
 from Observer import Observer
 from Player import Player
 from Entity import Entity
@@ -409,10 +408,9 @@ class Character(Observer):
         return await Tools.tryExcept(playerDataFn)
 
     async def acceptFriendRequest(self, id: str) -> dict | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [acceptFriendRequest].")
-
         async def friendReqFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [acceptFriendRequest].")
             friended = asyncio.get_event_loop().create_future()
             def resolve(value):
                 if not friended.done():
@@ -446,10 +444,9 @@ class Character(Observer):
         return await Tools.tryExcept(friendReqFn)
 
     async def acceptMagiport(self, name: str) -> dict | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [acceptMagiport].")
-
         async def magiportFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [acceptMagiport].")
             acceptedMagiport = asyncio.get_event_loop().create_future()
             def reject(reason=None):
                 if not acceptedMagiport.done():
@@ -473,10 +470,9 @@ class Character(Observer):
         return await Tools.tryExcept(magiportFn)
        
     async def acceptPartyInvite(self, id: str) -> dict | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [acceptPartyInvite].")
-
         async def partyInvFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [acceptPartyInvite].")
             acceptedInvite = asyncio.get_event_loop().create_future()
             def partyCheck(data):
                 if (Tools.hasKey(data, 'list')) and (Tools.hasKey(data['list'], self.id)) and (Tools.hasKey(data['list'], id)):
@@ -515,10 +511,9 @@ class Character(Observer):
         return await Tools.tryExcept(partyInvFn)
 
     async def acceptPartyRequest(self, id: str) -> dict | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [acceptPartyRequest].")
-        
         async def partyReqFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [acceptPartyRequest].")
             acceptedRequest = asyncio.get_event_loop().create_future()
             def partyCheck(data):
                 if (data.get('list', False)) and (self.id in data['list']) and (id in data['list']):
@@ -543,9 +538,9 @@ class Character(Observer):
         return await Tools.tryExcept(partyReqFn)
 
     async def basicAttack(self, id: str) -> str | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [basicAttack].")
         async def attackFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [basicAttack].")
             attackStarted = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not attackStarted.done():
@@ -598,12 +593,11 @@ class Character(Observer):
         return await Tools.tryExcept(attackFn)
 
     async def buy(self, itemName: str, quantity: int = 1) -> int | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [buy]")
-        if self.gold < self.G['items'][itemName]['g']:
-            raise Exception(f"Insufficient gold. We only have {self.gold}, but the item costs {self.G['itsms'][itemName]['g']}")
-        
         async def buyFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [buy]")
+            if self.gold < self.G['items'][itemName]['g']:
+                raise Exception(f"Insufficient gold. We only have {self.gold}, but the item costs {self.G['itsms'][itemName]['g']}")
             itemReceived = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not itemReceived.done():
@@ -645,28 +639,27 @@ class Character(Observer):
         return await Tools.tryExcept(buyFn)
 
     async def buyWithTokens(self, itemName: str) -> None:
-        numBefore = self.countItem(itemName)
-
-        tokenTypeNeeded = ''
-        numTokensNeeded = 0
-        for t in self.G['tokens']:
-            tokenType = t
-            tokenTable = self.G['tokens'][tokenType].values()
-            for item in tokenTable.keys():
-                if item != itemName:
-                    continue
-                tokenTypeNeeded = tokenType
-                numTokensNeeded = tokenTable[item]
-                break
-            if tokenTypeNeeded != '':
-                break
-        if tokenTypeNeeded == '':
-            raise Exception(f'{itemName} is not purchasable with tokens.')
-        numTokens = self.countItem(tokenTypeNeeded)
-        if numTokens < numTokensNeeded:
-            raise Exception(f'We need {numTokensNeeded} to buy {itemName}, but we only have {numTokens}.')
-        
         async def tokenBuyFn():
+            numBefore = self.countItem(itemName)
+
+            tokenTypeNeeded = ''
+            numTokensNeeded = 0
+            for t in self.G['tokens']:
+                tokenType = t
+                tokenTable = self.G['tokens'][tokenType].values()
+                for item in tokenTable.keys():
+                    if item != itemName:
+                        continue
+                    tokenTypeNeeded = tokenType
+                    numTokensNeeded = tokenTable[item]
+                    break
+                if tokenTypeNeeded != '':
+                    break
+            if tokenTypeNeeded == '':
+                raise Exception(f'{itemName} is not purchasable with tokens.')
+            numTokens = self.countItem(tokenTypeNeeded)
+            if numTokens < numTokensNeeded:
+                raise Exception(f'We need {numTokensNeeded} to buy {itemName}, but we only have {numTokens}.')
             itemReceived = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not itemReceived.done():
@@ -697,39 +690,38 @@ class Character(Observer):
         return await Tools.tryExcept(tokenBuyFn)
 
     async def buyFromMerchant(self, id: str, slot: str, rid: str, quantity: int = 1) -> dict | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [buyFromMerchant].")
-        if quantity <= 0:
-            raise Exception(f"We can not buy a quantity of {quantity}.")
-        merchant = self.players.get(id, False)
-        if not merchant:
-            raise Exception(f"We can not see {id} nearby.")
-        if Tools.distance(self, merchant) > Constants.NPC_INTERACTION_DISTANCE:
-            raise Exception(f"We are too far away from {id} to buy from.")
-        
-        item = merchant.slots.get(slot, False)
-        if not item:
-            raise Exception(f"We could not find an item in slot {slot} on {id}.")
-        if item.get('b', False):
-            raise Exception("The item is not for sale, this merchant is *buying* that item.")
-        if item.get('rid', False) != rid:
-            raise Exception(f"The RIDs do not match (item: {item.get('rid', None)}, supplied: {rid})")
-        
-        if (item.get('q', False)) and (quantity != 1):
-            print("we are only going to buy 1, as there is only 1 available.")
-            quantity = 1
-        elif (item.get('q', False)) and (quantity > item['q']):
-            print(f"We can't buy {quantity}, we can only buy {item['q']}, so we're doing that.")
-            quantity = item['q']
-        
-        if self.gold < item['price'] * quantity:
-            if self.gold < item['price']:
-                raise Exception(f"We don't have enough gold. It costs {item['price']}, but we only have {self.gold}")
-            buyableQuantity = math.floor(self.gold / item['price'])
-            print(f"We don't have enough gold to buy {quantity}, we can only buy {buyableQuantity}, so we're doing that.")
-            quantity = buyableQuantity
-        
         async def merchantBuyFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [buyFromMerchant].")
+            if quantity <= 0:
+                raise Exception(f"We can not buy a quantity of {quantity}.")
+            merchant = self.players.get(id, False)
+            if not merchant:
+                raise Exception(f"We can not see {id} nearby.")
+            if Tools.distance(self, merchant) > Constants.NPC_INTERACTION_DISTANCE:
+                raise Exception(f"We are too far away from {id} to buy from.")
+            
+            item = merchant.slots.get(slot, False)
+            if not item:
+                raise Exception(f"We could not find an item in slot {slot} on {id}.")
+            if item.get('b', False):
+                raise Exception("The item is not for sale, this merchant is *buying* that item.")
+            if item.get('rid', False) != rid:
+                raise Exception(f"The RIDs do not match (item: {item.get('rid', None)}, supplied: {rid})")
+            
+            if (item.get('q', False)) and (quantity != 1):
+                print("we are only going to buy 1, as there is only 1 available.")
+                quantity = 1
+            elif (item.get('q', False)) and (quantity > item['q']):
+                print(f"We can't buy {quantity}, we can only buy {item['q']}, so we're doing that.")
+                quantity = item['q']
+            
+            if self.gold < item['price'] * quantity:
+                if self.gold < item['price']:
+                    raise Exception(f"We don't have enough gold. It costs {item['price']}, but we only have {self.gold}")
+                buyableQuantity = math.floor(self.gold / item['price'])
+                print(f"We don't have enough gold to buy {quantity}, we can only buy {buyableQuantity}, so we're doing that.")
+                quantity = buyableQuantity
             itemBought = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not itemBought.done():
@@ -751,19 +743,17 @@ class Character(Observer):
         return await Tools.tryExcept(merchantBuyFn)
 
     async def buyFromPonty(self, item: dict) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [buyFromPonty].")
-        if not item.get('rid', False):
-            raise Exception("This item does not have an 'rid'.")
-        price = self.G['items'][item['name']]['g'] * Constants.PONTY_MARKUP
-        if item.get('q', 1) > 1:
-            price *= item['q']
-        if price > self.gold:
-            raise Exception(f"We don't have enough gold to buy {item['name']} from Ponty.")
-        
-        numBefore = self.countItem(item['name'], self.items)
-
         async def pontyBuyFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [buyFromPonty].")
+            if not item.get('rid', False):
+                raise Exception("This item does not have an 'rid'.")
+            price = self.G['items'][item['name']]['g'] * Constants.PONTY_MARKUP
+            if item.get('q', 1) > 1:
+                price *= item['q']
+            if price > self.gold:
+                raise Exception(f"We don't have enough gold to buy {item['name']} from Ponty.")
+            numBefore = self.countItem(item['name'], self.items)
             bought = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not bought.done():
@@ -1132,12 +1122,11 @@ class Character(Observer):
         return True
 
     async def closeMerchantStand(self):
-        if not self.ready:
-            raise Exception("We aren't ready yet [closeMerchantStand].")
-        if not hasattr(self, 'stand'):
-            return # It's already closed
-        
         async def closeFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [closeMerchantStand].")
+            if not hasattr(self, 'stand'):
+                return # It's already closed
             closed = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not closed.done():
@@ -1159,30 +1148,29 @@ class Character(Observer):
         return await Tools.tryExcept(closeFn)
 
     async def compound(self, item1Pos: int, item2Pos: int, item3Pos: int, cscrollPos: int, offeringPos: int = None) -> bool | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [compound].")
-        item1Info = self.items[item1Pos]
-        item2Info = self.items[item2Pos]
-        item3Info = self.items[item3Pos]
-        cscrollInfo = self.items[cscrollPos]
-        if item1Info == None:
-            raise Exception(f"There is no item in inventory slot {item1Pos} (item1).")
-        if item2Info == None:
-            raise Exception(f"There is no item in inventory slot {item2Pos} (item2).")
-        if item3Info == None:
-            raise Exception(f"There is no item in inventory slot {item3Pos} (item3).")
-        if cscrollInfo == None:
-            raise Exception(f"There is no item in inventory slot {cscrollPos} (cscroll).")
-        if offeringPos != None:
-            offeringInfo = self.items[offeringPos]
-            if offeringInfo == None:
-                raise Exception(f"There is no item in inventory slot {offeringPos} (offering).")
-        if not ((item1Info['name'] == item2Info['name']) and (item1Info['name'] == item3Info['name'])):
-            raise Exception("You can only combine 3 of the same items.")
-        if not ((item1Info['level'] == item2Info['level']) and (item1Info['level'] == item3Info['level'])):
-            raise Exception("You can only combine 3 items of the same level.")
-        
         async def compoundFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [compound].")
+            item1Info = self.items[item1Pos]
+            item2Info = self.items[item2Pos]
+            item3Info = self.items[item3Pos]
+            cscrollInfo = self.items[cscrollPos]
+            if item1Info == None:
+                raise Exception(f"There is no item in inventory slot {item1Pos} (item1).")
+            if item2Info == None:
+                raise Exception(f"There is no item in inventory slot {item2Pos} (item2).")
+            if item3Info == None:
+                raise Exception(f"There is no item in inventory slot {item3Pos} (item3).")
+            if cscrollInfo == None:
+                raise Exception(f"There is no item in inventory slot {cscrollPos} (cscroll).")
+            if offeringPos != None:
+                offeringInfo = self.items[offeringPos]
+                if offeringInfo == None:
+                    raise Exception(f"There is no item in inventory slot {offeringPos} (offering).")
+            if not ((item1Info['name'] == item2Info['name']) and (item1Info['name'] == item3Info['name'])):
+                raise Exception("You can only combine 3 of the same items.")
+            if not ((item1Info['level'] == item2Info['level']) and (item1Info['level'] == item3Info['level'])):
+                raise Exception("You can only combine 3 items of the same level.")
             compoundComplete = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not compoundComplete.done():
@@ -1228,139 +1216,145 @@ class Character(Observer):
         return await Tools.tryExcept(compoundFn)
 
     async def craft(self, item: str) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [craft].")
-        gInfo = self.G['craft'].get(item, None)
-        if gInfo == None:
-            raise Exception(f"Can't find a recipe for {item}.")
-        if gInfo['cose'] > self.gold:
-            raise Exception(f"We don't have enough gold to craft {item}.")
-
-        itemPositions = []
-        for i in range(0, len(gInfo['items'])):
-            requiredQuantity = gInfo['items'][i][0]
-            requiredName = gInfo['items'][i][1]
-            fixedItemLevel = None
-            if len(gInfo['items'][i]) == 3:
-                fixedItemLevel = gInfo['items'][i][2]
-            if fixedItemLevel == None:
-                gInfo = self.G['items'][requiredName]
-                if Tools.hasKey(gInfo, 'upgrade') or Tools.hasKey(gInfo, 'compound'):
-                    fixedItemLevel = 0
-            
-            # TODO: searchArgs
-            searchArgs = {}
-
-            itemPos = self.locateItem(requiredName, self.items, searchArgs)
-            if itemPos == None:
-                raise Exception(f"We don't have {requiredQuantity} {requiredName} to craft {item}.")
-            
-            itemPositions.append([i, itemPos])
-
         async def craftedFn():
-                crafted = asyncio.get_event_loop().create_future()
-                def reject(reason):
+            if not self.ready:
+                raise Exception("We aren't ready yet [craft].")
+            gInfo = self.G['craft'].get(item, None)
+            if gInfo == None:
+                raise Exception(f"Can't find a recipe for {item}.")
+            if gInfo['cose'] > self.gold:
+                raise Exception(f"We don't have enough gold to craft {item}.")
+
+            itemPositions = []
+            for i in range(0, len(gInfo['items'])):
+                requiredQuantity = gInfo['items'][i][0]
+                requiredName = gInfo['items'][i][1]
+                fixedItemLevel = None
+                if len(gInfo['items'][i]) == 3:
+                    fixedItemLevel = gInfo['items'][i][2]
+                if fixedItemLevel == None:
+                    gInfo = self.G['items'][requiredName]
+                    if Tools.hasKey(gInfo, 'upgrade') or Tools.hasKey(gInfo, 'compound'):
+                        fixedItemLevel = 0
+                
+                levelArg = fixedItemLevel
+                quantityGreaterThanArg = requiredQuantity - 1 if requiredQuantity > 0 else None
+
+                itemPos = self.locateItem(requiredName, self.items, level=levelArg, quantityGreaterThan=quantityGreaterThanArg)
+                if itemPos == None:
+                    raise Exception(f"We don't have {requiredQuantity} {requiredName} to craft {item}.")
+                
+                itemPositions.append([i, itemPos])
+            crafted = asyncio.get_event_loop().create_future()
+            def reject(reason):
                     if not crafted.done():
                         self.socket.off('game_response', successCheck)
                         crafted.set_exception(Exception(reason))
-                def resolve(value = None):
+            def resolve(value = None):
                     if not crafted.done():
                         self.socket.off('game_response', successCheck)
                         crafted.set_result(value)
-                def successCheck(data):
+            def successCheck(data):
                     if isinstance(data, dict):
                         if data['response'] == 'craft' and data['name'] == item:
                             resolve()
-                Tools.setTimeout(reject, Constants.TIMEOUT, f"craft timeout ({Constants.TIMEOUT}s)")
-                self.socket.on('game_response', successCheck)
-                await self.socket.emit('craft', { 'items': itemPositions })
-                while not crafted.done():
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"craft timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('game_response', successCheck)
+            await self.socket.emit('craft', { 'items': itemPositions })
+            while not crafted.done():
                     await asyncio.sleep(Constants.WAIT)
-                return crafted.result()
-            
+            return crafted.result()    
         return await Tools.tryExcept(craftedFn)
 
     async def depositGold(self, gold: int) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [depositGold].")
-        if self.map != 'bank':
-            raise Exception("We need to be in 'bank' to deposit gold.")
-        if gold <= 0:
-            raise Exception("We can't deposit 0 or less gold")
-        
-        if gold > self.gold:
-            print(f"We only have {self.gold} gold, so we're depositing that instead of {gold}.")
-            gold = self.gold
-        
-        await self.socket.emit('bank', { 'amount': gold, 'operation': 'deposit' })
+        async def goldFn():
+            nonlocal self
+            nonlocal gold
+            if not self.ready:
+                raise Exception("We aren't ready yet [depositGold].")
+            if self.map != 'bank':
+                raise Exception("We need to be in 'bank' to deposit gold.")
+            if gold <= 0:
+                raise Exception("We can't deposit 0 or less gold")
+            
+            if gold > self.gold:
+                print(f"We only have {self.gold} gold, so we're depositing that instead of {gold}.")
+                gold = self.gold
+            
+            await self.socket.emit('bank', { 'amount': gold, 'operation': 'deposit' })
+        return await Tools.tryExcept(goldFn)
     
     async def depositItem(self, inventoryPos: int, bankPack: str = None, bankSlot: int = -1) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [depositItem].")
-        if self.map not in ['bank', 'bank_b', 'bank_u']:
-            raise Exception(f"We're not in the bank (we're in '{self.map}')")
-
-        for i in range(0, 20):
-            if Tools.hasKey(self.bank, 'items0'):
-                break
-            await asyncio.sleep(250)
-        if not Tools.hasKey(self.bank, 'items0'):
-            raise Exception("We don't have bank information yet. Please try again in a bit.")
-        
-        item = self.items[inventoryPos]
-        if item == None:
-            raise Exception(f"There is no item in inventory slot {inventoryPos}.")
-
-        if bankPack:
-            bankPackNum = int(bankPack[5:7])
-            if (self.map == 'bank' and (bankPackNum < 0 or bankPackNum > 7)) or (self.map == 'bank_b' and (bankPackNum < 8 or bankPackNum > 23)) or (self.map == 'bank_u' and (bankPackNum < 24 or bankPackNum > 47)):
-                raise Exception(f"We can not access {bankPack} on {self.map}.")
-        else:
-            bankSlot = None
-            packFrom = None
-            packTo = None
-            if self.map == 'bank':
-                packFrom = 0
-                packTo = 7
-            elif self.map == 'bank_b':
-                packFrom = 8
-                packTo = 23
-            elif self.map == 'bank_u':
-                packFrom = 24
-                packTo = 47
-            
-            numStackable = self.G['items'][item['name']].get('s', None)
-
-            emptyPack = None
-            emptySlot = None
-            for packNum in range(packFrom, packTo):
-                packName = f'items{packNum}'
-                pack = self.bank.get(packName, None)
-                if not pack:
-                    continue
-                for slotNum in range(0, len(pack)):
-                    slot = pack[slotNum]
-                    if slot == None:
-                        if numStackable == None:
-                            bankPack = packName
-                            bankSlot = slotNum
-                        elif emptyPack == None and emptySlot == None:
-                            emptyPack = packName
-                            emptySlot = slotNum
-                    elif numStackable != None and slot['name'] == item['name'] and (slot['q'] + item['q'] <= numStackable):
-                        bankPack = packName
-                        bankSlot = -1
-                        break
-                if bankPack != None and bankSlot != None:
-                    break
-            if bankPack == None and bankSlot == None and emptyPack != None and emptySlot != None:
-                bankPack = emptyPack
-                bankSlot = emptySlot
-            elif bankPack == None and bankSlot == None and emptyPack == None and emptySlot == None:
-                raise Exception(f"Bank is full. There is nowhere to place {item['name']}")
-        
-        bankItemCount = self.countItem(item['name'], self.bank[bankPack])
         async def swapFn():
+            nonlocal self
+            nonlocal inventoryPos
+            nonlocal bankPack
+            nonlocal bankSlot
+            if not self.ready:
+                raise Exception("We aren't ready yet [depositItem].")
+            if self.map not in ['bank', 'bank_b', 'bank_u']:
+                raise Exception(f"We're not in the bank (we're in '{self.map}')")
+
+            for i in range(0, 20):
+                if Tools.hasKey(self.bank, 'items0'):
+                    break
+                await asyncio.sleep(250)
+            if not Tools.hasKey(self.bank, 'items0'):
+                raise Exception("We don't have bank information yet. Please try again in a bit.")
+            
+            item = self.items[inventoryPos]
+            if item == None:
+                raise Exception(f"There is no item in inventory slot {inventoryPos}.")
+
+            if bankPack:
+                bankPackNum = int(bankPack[5:7])
+                if (self.map == 'bank' and (bankPackNum < 0 or bankPackNum > 7)) or (self.map == 'bank_b' and (bankPackNum < 8 or bankPackNum > 23)) or (self.map == 'bank_u' and (bankPackNum < 24 or bankPackNum > 47)):
+                    raise Exception(f"We can not access {bankPack} on {self.map}.")
+            else:
+                bankSlot = None
+                packFrom = None
+                packTo = None
+                if self.map == 'bank':
+                    packFrom = 0
+                    packTo = 7
+                elif self.map == 'bank_b':
+                    packFrom = 8
+                    packTo = 23
+                elif self.map == 'bank_u':
+                    packFrom = 24
+                    packTo = 47
+                
+                numStackable = self.G['items'][item['name']].get('s', None)
+
+                emptyPack = None
+                emptySlot = None
+                for packNum in range(packFrom, packTo):
+                    packName = f'items{packNum}'
+                    pack = self.bank.get(packName, None)
+                    if not pack:
+                        continue
+                    for slotNum in range(0, len(pack)):
+                        slot = pack[slotNum]
+                        if slot == None:
+                            if numStackable == None:
+                                bankPack = packName
+                                bankSlot = slotNum
+                            elif emptyPack == None and emptySlot == None:
+                                emptyPack = packName
+                                emptySlot = slotNum
+                        elif numStackable != None and slot['name'] == item['name'] and (slot['q'] + item['q'] <= numStackable):
+                            bankPack = packName
+                            bankSlot = -1
+                            break
+                    if bankPack != None and bankSlot != None:
+                        break
+                if bankPack == None and bankSlot == None and emptyPack != None and emptySlot != None:
+                    bankPack = emptyPack
+                    bankSlot = emptySlot
+                elif bankPack == None and bankSlot == None and emptyPack == None and emptySlot == None:
+                    raise Exception(f"Bank is full. There is nowhere to place {item['name']}")
+            
+            bankItemCount = self.countItem(item['name'], self.bank[bankPack])
             swapped = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not swapped.done():
@@ -1387,12 +1381,13 @@ class Character(Observer):
         return await Tools.tryExcept(swapFn)
 
     async def emote(self, emotionName) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [emote].")
-        if not hasattr(self, 'emx') or not Tools.hasKey(self.emx, emotionName):
-            raise Exception(f"We don't have the emotion '{emotionName}'")
-        
         async def emoteFn():
+            nonlocal self
+            nonlocal emotionName
+            if not self.ready:
+                raise Exception("We aren't ready yet [emote].")
+            if not hasattr(self, 'emx') or not Tools.hasKey(self.emx, emotionName):
+                raise Exception(f"We don't have the emotion '{emotionName}'")
             emoted = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not emoted.done():
@@ -1423,25 +1418,27 @@ class Character(Observer):
         return await Tools.tryExcept(emoteFn)
 
     async def enter(self, map: str, instance: str = None):
-        if not self.ready:
-            raise Exception("We aren't ready yet [enter].")
-
-        found = False
-        distance = sys.maxsize
-        for d in self.G['maps'][self.map]['doors']:
-            if d[4] != map:
-                continue
-            found = True
-            distance = Pathfinder.doorDistance(self, d)
-            if distance > Constants.DOOR_REACH_DISTANCE:
-                continue
-            break
-        if not found:
-            raise Exception(f"There is no door to {map} from {self.map}.")
-        if distance > Constants.DOOR_REACH_DISTANCE:
-            raise Exception(f"We're too far ({distance}) from the door to {map}.")
-
         async def enterFn():
+            nonlocal self
+            nonlocal map
+            nonlocal instance
+            if not self.ready:
+                raise Exception("We aren't ready yet [enter].")
+
+            found = False
+            distance = sys.maxsize
+            for d in self.G['maps'][self.map]['doors']:
+                if d[4] != map:
+                    continue
+                found = True
+                distance = Pathfinder.doorDistance(self, d)
+                if distance > Constants.DOOR_REACH_DISTANCE:
+                    continue
+                break
+            if not found:
+                raise Exception(f"There is no door to {map} from {self.map}.")
+            if distance > Constants.DOOR_REACH_DISTANCE:
+                raise Exception(f"We're too far ({distance}) from the door to {map}.")
             enterComplete = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not enterComplete.done():
@@ -1469,17 +1466,18 @@ class Character(Observer):
             while not enterComplete.done():
                 await asyncio.sleep(Constants.WAIT)
             return enterComplete.result()
-        
         return await Tools.tryExcept(enterFn)
 
     async def equip(self, inventoryPos, equipSlot = None) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [equip].")
-        if self.items[inventoryPos] == None:
-            raise Exception(f"No item in inventory slot {inventoryPos}.")
-        
-        iInfo = self.items[inventoryPos]
         async def equipFn():
+            nonlocal self
+            nonlocal inventoryPos
+            nonlocal equipSlot
+            if not self.ready:
+                raise Exception("We aren't ready yet [equip].")
+            if self.items[inventoryPos] == None:
+                raise Exception(f"No item in inventory slot {inventoryPos}.")
+            iInfo = self.items[inventoryPos]
             equipFinished = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not equipFinished.done():
@@ -1515,14 +1513,15 @@ class Character(Observer):
         return await Tools.tryExcept(equipFn)
 
     async def exchange(self, inventoryPos: int) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [exchange].")
-        if self.items[inventoryPos] == None:
-            raise Exception(f"No item in inventory slot {inventoryPos}.")
-        if Tools.hasKey(self.G['maps'][self.map], 'mount'):
-            raise Exception("We can't exchange things in the bank.")
-        
         async def exchangeFn():
+            nonlocal self
+            nonlocal inventoryPos
+            if not self.ready:
+                raise Exception("We aren't ready yet [exchange].")
+            if self.items[inventoryPos] == None:
+                raise Exception(f"No item in inventory slot {inventoryPos}.")
+            if Tools.hasKey(self.G['maps'][self.map], 'mount'):
+                raise Exception("We can't exchange things in the bank.")
             global startedExchange 
             startedExchange = False
             if Tools.hasKey(self.q, 'exchange'):
@@ -1560,26 +1559,25 @@ class Character(Observer):
             while not exchangeFinished.done():
                 await asyncio.sleep(Constants.WAIT)
             return exchangeFinished.result()
-        
         return await Tools.tryExcept(exchangeFn)
 
     async def finishMonsterHuntQuest(self):
-        if not self.ready:
-            raise Exception("We aren't ready yet [finishMonsterHuntQuest].")
-        if not Tools.hasKey(self.s, 'monsterhunt'):
-            raise Exception("We don't have a monster hunt to turn in.")
-        if self.s['monsterhunt']['c'] > 0:
-            raise Exception(f"We still have to kill {self.s['monsterhunt']['c']} {self.s['monsterhunt']['id']}(s).")
-
-        close = False
-        for npc in self.G['maps'][self.map]['npcs'].values():
-            if npc['id'] != 'monsterhunter': continue
-            if Tools.distance(self, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.NPC_INTERACTION_DISTANCE: continue
-            close = True
-            break
-        if not close: raise Exception("We are too far away from the Monster Hunter NPC.")
-
         async def questFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [finishMonsterHuntQuest].")
+            if not Tools.hasKey(self.s, 'monsterhunt'):
+                raise Exception("We don't have a monster hunt to turn in.")
+            if self.s['monsterhunt']['c'] > 0:
+                raise Exception(f"We still have to kill {self.s['monsterhunt']['c']} {self.s['monsterhunt']['id']}(s).")
+
+            close = False
+            for npc in self.G['maps'][self.map]['npcs'].values():
+                if npc['id'] != 'monsterhunter': continue
+                if Tools.distance(self, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.NPC_INTERACTION_DISTANCE: continue
+                close = True
+                break
+            if not close: raise Exception("We are too far away from the Monster Hunter NPC.")
             questFinished = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not questFinished.done():
@@ -1658,7 +1656,7 @@ class Character(Observer):
         if returnHighestHP != None: numReturnOptions += 1
         if returnLowestHP != None: numReturnOptions += 1
         if returnNearest != None: numReturnOptions += 1
-        if numReturnOptions > 1: print("You supplied getEntity with more than one returnX option. This function may not return the entity you want.")
+        if numReturnOptions > 1: self.logger.warn("You supplied getEntity with more than one returnX option. This function may not return the entity you want.")
 
         if len(ents) == 1 or numReturnOptions == 0: return ents[0]
 
@@ -1701,27 +1699,27 @@ class Character(Observer):
         return None
 
     async def getMonsterHuntQuest(self) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [getMonsterHuntQuest].")
-        if Tools.hasKey(self.s, 'monsterhunt') and self.s['monsterhunt']['c'] > 0:
-            raise Exception(f"We can't get a new monsterhunt. We have {self.s['monsterhunt']['ms']}ms left to kill {self.s['monsterhunt']['c']} {self.s['monsterhunt']['id']}(s).")
-        if self.ctype == 'merchant':
-            raise Exception("Merchants can't do Monster Hunts.")
-        
-        close = False
-        for npc in self.G['maps'][self.map]['npcs'].values():
-            if npc['id'] != 'monsterhunter': continue
-            if Tools.distance(self, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.NPC_INTERACTION_DISTANCE: continue
-            close = True
-            break
-        if not close:
-            raise Exception("We are too far away from the Monster Hunter NPC.")
-        
-        if Tools.hasKey(self.s, 'monsterhunt') and self.s['monsterhunt']['c'] == 0:
-            print("We are going to finish the current monster quest first...")
-            await self.finishMonsterHuntQuest()
-        
         async def questFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [getMonsterHuntQuest].")
+            if Tools.hasKey(self.s, 'monsterhunt') and self.s['monsterhunt']['c'] > 0:
+                raise Exception(f"We can't get a new monsterhunt. We have {self.s['monsterhunt']['ms']}ms left to kill {self.s['monsterhunt']['c']} {self.s['monsterhunt']['id']}(s).")
+            if self.ctype == 'merchant':
+                raise Exception("Merchants can't do Monster Hunts.")
+            
+            close = False
+            for npc in self.G['maps'][self.map]['npcs'].values():
+                if npc['id'] != 'monsterhunter': continue
+                if Tools.distance(self, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.NPC_INTERACTION_DISTANCE: continue
+                close = True
+                break
+            if not close:
+                raise Exception("We are too far away from the Monster Hunter NPC.")
+            
+            if Tools.hasKey(self.s, 'monsterhunt') and self.s['monsterhunt']['c'] == 0:
+                print("We are going to finish the current monster quest first...")
+                await self.finishMonsterHuntQuest()
             questGot = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not questGot.done():
@@ -1754,10 +1752,9 @@ class Character(Observer):
         return await Tools.tryExcept(questFn)
 
     async def getPlayers(self) -> dict:
-        if not self.ready:
-            raise Exception("We aren't ready yet [getPlayers].")
-        
         async def playersFn():
+            nonlocal self
+            if not self.ready: raise Exception("We aren't ready yet [getPlayers].")
             playersData = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not playersData.done():
@@ -1778,9 +1775,9 @@ class Character(Observer):
         return await Tools.tryExcept(playersFn)
 
     async def getPontyItems(self) -> list[dict]:
-        if not self.ready:
-            raise Exception("We aren't ready yet [getPontyItems].")
         async def pontyFn():
+            nonlocal self
+            if not self.ready: raise Exception("We aren't ready yet [getPontyItems].")
             pontyItems = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not pontyItems.done():
@@ -1810,12 +1807,12 @@ class Character(Observer):
         return self.entities.get(self.target)
 
     async def getTrackerData(self) -> dict:
-        if not self.ready:
-            raise Exception("We aren't ready yet [getTrackerData].")
-        if not self.hasItem('tracker'):
-            raise Exception("We need a tracker to obtain tracker data.")
-        
         async def trackerFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [getTrackerData].")
+            if not self.hasItem('tracker'):
+                raise Exception("We need a tracker to obtain tracker data.")
             gotData = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not gotData.done():
@@ -1842,12 +1839,13 @@ class Character(Observer):
         return self.fear > 0
 
     async def kickPartyMember(self, toKick: str) -> None:
-        if not self.party: return
-        if toKick not in self.partyData['list']: return
-        if toKick == self.id: return await self.leaveParty()
-        if self.partyData['list'].index(self.id) > self.partyData['list'].index(toKick): raise Exception(f"We can't kick {toKick}, they're higher on the party list.")
-
         async def kickFn():
+            nonlocal self
+            nonlocal toKick
+            if not self.party: return
+            if toKick not in self.partyData['list']: return
+            if toKick == self.id: return await self.leaveParty()
+            if self.partyData['list'].index(self.id) > self.partyData['list'].index(toKick): raise Exception(f"We can't kick {toKick}, they're higher on the party list.")
             kicked = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not kicked.done():
@@ -1869,8 +1867,9 @@ class Character(Observer):
         return await Tools.tryExcept(kickFn)
 
     async def leaveMap(self) -> None:
-        if not self.ready: raise Exception("We aren't ready yet [leaveMap].")
         async def leaveFn():
+            nonlocal self
+            if not self.ready: raise Exception("We aren't ready yet [leaveMap].")
             leaveComplete = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 self.socket.off('new_map', leaveCheck)
@@ -1899,24 +1898,31 @@ class Character(Observer):
         return await Tools.tryExcept(leaveFn)
 
     async def leaveParty(self) -> None:
-        if not self.ready: raise Exception("We aren't ready yet [leaveParty].")
-        await self.socket.emit('party', { 'event': 'leave' })
-        return
-
+        async def leaveFn():
+            nonlocal self
+            if not self.ready: raise Exception("We aren't ready yet [leaveParty].")
+            await self.socket.emit('party', { 'event': 'leave' })
+            return
+        return await Tools.tryExcept(leaveFn)
+            
     async def move(self, x: int, y: int, *, disableSafetyCheck: bool = False, resolveOnStart: bool = False) -> dict[str, int|str]:
-        if not self.ready: raise Exception("We aren't ready yet [move].")
-        if x == None or y == None: raise Exception("Please provide an x and y coordinate to move.")
-        if not (isinstance(x, int) or isinstance(x, float)) or not (isinstance(y, int) or isinstance(y, float)): raise Exception("Please use a whole number for both x and y.")
-
-        to = { 'map': self.map, 'x': x, 'y': y }
-        if not disableSafetyCheck:
-            to = Pathfinder.getSafeWalkTo({'map': self.map, 'x': self.x, 'y': self.y}, {'map': self.map, 'x': x, 'y': y})
-            if to['x'] != x or to['y'] != y:
-                print(f"move: We can't move to ({x}, {y}) safely. We will move to ({to['x']}, {to['y']}) instead.")
-        
-        if self.x == to['x'] and self.y == to['y']: return { 'map': self.map, 'x': self.x, 'y': self.y }
-
         async def moveFn():
+            nonlocal self
+            nonlocal x
+            nonlocal y
+            nonlocal disableSafetyCheck
+            nonlocal resolveOnStart
+            if not self.ready: raise Exception("We aren't ready yet [move].")
+            if x == None or y == None: raise Exception("Please provide an x and y coordinate to move.")
+            if not (isinstance(x, int) or isinstance(x, float)) or not (isinstance(y, int) or isinstance(y, float)): raise Exception("Please use a whole number for both x and y.")
+
+            to = { 'map': self.map, 'x': x, 'y': y }
+            if not disableSafetyCheck:
+                to = Pathfinder.getSafeWalkTo({'map': self.map, 'x': self.x, 'y': self.y}, {'map': self.map, 'x': x, 'y': y})
+                if to['x'] != x or to['y'] != y:
+                    print(f"move: We can't move to ({x}, {y}) safely. We will move to ({to['x']}, {to['y']}) instead.")
+            
+            if self.x == to['x'] and self.y == to['y']: return { 'map': self.map, 'x': self.x, 'y': self.y }
             timeToFinishMove = 0.001 + self.ping + Tools.distance(self, { 'x': to['x'], 'y': to['y'] }) / self.speed
             moveFinished = asyncio.get_event_loop().create_future()
             def reject(reason = None):
@@ -1961,24 +1967,25 @@ class Character(Observer):
                     timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
                 else:
                     reject(f"move to ({to['x']}, {to['y']}) failed (We're currently going from ({self.x}, {self.y}) to ({self.going_x}, {self.going_y}))")
-            
             timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
             self.socket.on('player', checkPlayer)
+            if not self.moving or self.going_x != to['x'] or self.going_y != to['y']:
+                await self.socket.emit('move', { 'going_x': to['x'], 'going_y': to['y'], 'm': self.m, 'x': self.x, 'y': self.y })
+                self.updatePositions()
+                self.going_x = to['x']
+                self.going_y = to['y']
+                self.moving = True
             while not moveFinished.done():
                 await asyncio.sleep(Constants.WAIT)
             return moveFinished.result()
-        if not self.moving or self.going_x != to['x'] or self.going_y != to['y']:
-            await self.socket.emit('move', { 'going_x': to['x'], 'going_y': to['y'], 'm': self.m, 'x': self.x, 'y': self.y })
-            self.updatePositions()
-            self.going_x = to['x']
-            self.going_y = to['y']
-            self.moving = True
 
         return await Tools.tryExcept(moveFn)
 
     async def openChest(self, id: str) -> dict:
-        if not self.ready: raise Exception("We aren't ready yet [openChest].")
         async def chestFn():
+            nonlocal self
+            nonlocal id
+            if not self.ready: raise Exception("We aren't ready yet [openChest].")
             chestOpened = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not chestOpened.done():
@@ -3627,5 +3634,57 @@ class Character(Observer):
                     for npc in gMap['npcs']:
                         if npc['id'] == npcToLocate:
                             return { 'map': mapName, 'x': npc['position'][0], 'y': npc['position'][1] }
-        except Exception as e:
+        except:
             self.logger.exception(f"{itemName} is not craftable.")
+
+    def locateExchangeNPC(self, itemName):
+        try:
+            gItem = self.G['items'][itemName]
+            if Tools.hasKey(gItem, 'quest'):
+                npcToLocate = None
+                for npcName in self.G['npcs']:
+                    gNPC = self.G['npcs'][npcName]
+                    if Tools.hasKey(gNPC, 'ignore'): continue
+
+                    if gNPC.get('quest', None) == gItem['quest']:
+                        npcToLocate = gNPC['id']
+                        break
+                if npcToLocate != None:
+                    for mapName in self.G['maps']:
+                        gMap = self.G['maps'][mapName]
+                        if Tools.hasKey(gMap, 'ignore'): continue
+
+                        for npc in gMap['npcs']:
+                            if npc['id'] == npcToLocate:
+                                return { 'map': mapName, 'x': npc['position'][0], 'y': npc['position'][1] }
+            
+            if gItem['type'] == 'token':
+                npcToLocate = None
+                for npcName in self.G['npcs']:
+                    gNPC = self.G['npcs'][npcName]
+                    if Tools.hasKey(gNPC, 'ignore'): continue
+
+                    if gNPC.get('token') == itemName:
+                        npcToLocate = gNPC['id']
+                        break
+                if npcToLocate != None:
+                    for mapName in self.G['maps']:
+                        gMap = self.G['maps'][mapName]
+                        if Tools.hasKey(gMap, 'ignore'): continue
+
+                        for npc in gMap['npcs']:
+                            if npc['id'] == npcToLocate:
+                                return { 'map': mapName, 'x': npc['position'][0], 'y': npc['position'][1] }
+            
+            if Tools.hasKey(gItem, 'e'):
+                for mapName in self.G['maps']:
+                    gMap = self.G['maps'][mapName]
+                    if Tools.hasKey(gMap, 'ignore'): continue
+
+                    for npc in gMap['npcs']:
+                        if npc['id'] == 'exchange':
+                            return { 'map': mapName, 'x': npc['position'][0], 'y': npc['position'][1] }
+
+            raise Exception()
+        except:
+            self.logger.exception(f"{itemName} is not exchangeable")
