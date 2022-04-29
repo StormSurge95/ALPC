@@ -25,7 +25,7 @@ class Game:
     @staticmethod
     async def deleteMail(session: aiohttp.ClientSession, mailID: str):
         if not Game.loggedIn:
-            print('You must login first.')
+            logger.error('You must login first.')
             raise Exception()
         params = {}
         params['method'] = 'delete_mail'
@@ -50,7 +50,7 @@ class Game:
             file.close()
             return Game.G
         except Exception:
-            print('Updating \'G\' data...')
+            logger.info("Updating 'G' data...")
             async with session.get('http://adventure.land/data.js') as response:
                 if response.status == 200:
                     data = await response.text()
@@ -58,21 +58,21 @@ class Game:
                     Game.G = ujson.loads(matches.group(1))
                     if optimize:
                         Game.G = Game.optimizeG(Game.G)
-                    print('Updated \'G\' data!')
+                    logger.info("Updated 'G' data!")
                     if cache:
                         file = open(gFile, mode='w')
                         file.write(ujson.dumps(Game.G))
                         file.close()
                     return Game.G
                 else:
-                    print('Error fetching https://adventure.land/data.js')
-                    print(response)
+                    logger.error('Error fetching https://adventure.land/data.js')
+                    logger.error(response)
                     raise Exception()
 
     @staticmethod
     async def getMail(session: aiohttp.ClientSession, all: bool = True):
         if not Game.loggedIn:
-            print('You must login first.')
+            logger.error('You must login first.')
             raise Exception()
         params = {}
         params['method'] = 'pull_mail'
@@ -100,18 +100,17 @@ class Game:
                 Game.version = int(matches.group(1))
                 return Game.version
             else:
-                print('Error fetching http://adventure.land/comm')
-                print(response)
+                logger.error('Error fetching http://adventure.land/comm')
+                logger.error(response)
 
     @staticmethod
     async def markMailAsRead(session: aiohttp.ClientSession, mailID: str):
         if not Game.loggedIn:
-            print('You must login first.')
+            logger.error('You must login first.')
             raise Exception()
         params = {}
         params['method'] = 'read_mail'
         params['arguments'] = ujson.encode({'mail': mailID}, ensure_ascii=False, encode_html_chars=True, escape_forward_slashes=False)
-        print(params)
         async with session.post('http://adventure.land/api/read_mail', data=params) as response:
             data = ujson.loads(await response.text())
             print(data)
@@ -121,7 +120,7 @@ class Game:
         #if bool(mongo) and (not Database.connection):
             #await Database.connect(mongo)
         if not Game.loggedIn:
-            print('Logging in...')
+            logger.info('Logging in...')
             params = {}
             params['method'] = 'signup_or_login'
             params['arguments'] = ujson.encode({'email': email, 'only_login': True, 'password': password}, ensure_ascii=False, encode_html_chars=True, escape_forward_slashes=False)
@@ -134,12 +133,12 @@ class Game:
                         break
                 if loginResult and loginResult['message'] == 'Logged In!':
                     Game.loggedIn = True
-                    print('Logged in!')
+                    logger.info('Logged in!')
                 elif loginResult and loginResult.get('message'):
-                    print(str(loginResult['message']))
+                    logger.error(str(loginResult['message']))
                     raise Exception(loginResult['message'])
                 else:
-                    print(data)
+                    logger.error(data)
         return await Game.updateServersAndCharacters(session)
 
     @staticmethod
@@ -150,7 +149,7 @@ class Game:
             fileData = file.read()
             file.close()
         except Exception:
-            print(f'Could not locate \'{path}\'.')
+            logger.error(f'Could not locate \'{path}\'.')
         data = ujson.loads(fileData)
 
         try:
@@ -162,7 +161,7 @@ class Game:
     @staticmethod
     async def logoutEverywhere(session: aiohttp.ClientSession):
         if not Game.loggedIn:
-            print('You must login first.')
+            logger.error('You must login first.')
             raise Exception()
         params = {}
         params['method'] = 'logout_everywhere'
@@ -259,9 +258,9 @@ class Game:
         return g
 
     @staticmethod
-    async def startCharacter(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):
+    async def startCharacter(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str, log: bool = False):
         if not Game.loggedIn:
-            print('You must login first.')
+            logger.error('You must login first.')
             raise Exception()
         if not bool(getattr(Game, 'characters', False)):
             await Game.updateServersAndCharacters(session)
@@ -271,12 +270,12 @@ class Game:
         userID = userInfo.split('-')[0]
         userAuth = userInfo.split('-')[1]
         if not Game.characters.get(cName):
-            print(f"You don't have a character with the name '{cName}'")
+            logger.error(f"You don't have a character with the name '{cName}'")
             raise Exception()
         characterID = Game.characters[cName]['id']
 
         player = None
-        player = Character(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID])
+        player = Character(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
         await player.connect()
         return player
         #ctype = self.characters[cName].type
@@ -328,7 +327,7 @@ class Game:
     @staticmethod
     async def startObserver(session: aiohttp.ClientSession, region: str, id: str):
         if not Game.loggedIn:
-            print('You must login first.')
+            Game.logger.error('You must login first.')
             raise Exception()
         if not bool(Game.characters):
             await Game.updateServersAndCharacters(session)
@@ -342,7 +341,7 @@ class Game:
     @staticmethod
     async def updateServersAndCharacters(session: aiohttp.ClientSession):
         if not Game.loggedIn:
-            print('You must login first.')
+            logger.error('You must login first.')
             raise Exception()
         params = {}
         params['method'] = 'servers_and_characters'
@@ -359,5 +358,5 @@ class Game:
                     Game.characters[characterData['name']] = characterData
                 return True
             else:
-                print(response)
+                logger.error(response)
                 return False

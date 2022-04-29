@@ -1,12 +1,10 @@
 from Tools import Tools
-from Entity import Entity
 import logging
 import logging.config
-import typing
 import sys
 
 logger = logging.getLogger(__name__)
-handler = logging.StreamHandler(sys.stdout)
+handler = logging.StreamHandler()
 handler.setLevel(logging.DEBUG)
 handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
 logger.addHandler(handler)
@@ -16,6 +14,11 @@ class Player:
         self.G = g
         self.map = map
         self.inst = instance
+        self.logger = logging.getLogger('Player')
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
+        self.logger.addHandler(handler)
         if not data.get('npc', False):
             self.damage_type = self.G['classes'][data['ctype']]['damage_type']
 
@@ -37,7 +40,7 @@ class Player:
 
         baseDamage = self.attack
         if not self.G['skills'].get(skill, False):
-            print(f'calculateDamageRange DEBUG: {skill} isn\'t a skill!?')
+            logger.debug(f'{skill} isn\'t a skill!?')
         if self.G['skills'][skill].get('damage', False):
             baseDamage = self.G['skills'][skill]['damage']
 

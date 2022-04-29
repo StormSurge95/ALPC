@@ -10,7 +10,7 @@ from . import exceptions
 from . import namespace
 from . import packet
 
-default_logger = logging.getLogger('socketio.client')
+default_logger = logging.getLogger('psSocketIO.client')
 reconnecting_clients = []
 
 
@@ -140,7 +140,9 @@ class Client(object):
                     self.logger.setLevel(logging.INFO)
                 else:
                     self.logger.setLevel(logging.ERROR)
-                self.logger.addHandler(logging.StreamHandler())
+                handler = logging.StreamHandler()
+                handler.setFormatter(logging.Formatter('%(levelname)s - %(name)s - %(message)s'))
+                self.logger.addHandler(handler)
 
         self.connection_url = None
         self.connection_headers = None

@@ -11,7 +11,7 @@ UNKNOWN = 1
 UNWALKABLE = 2
 WALKABLE = 3
 
-log = logging.getLogger(__name__)
+
 
 class Pathfinder:
     G = None
@@ -22,6 +22,8 @@ class Pathfinder:
 
     grids = {}
     graph = igraph.Graph(directed = True)
+
+    logger = None
 
     @staticmethod
     def doorDistance(a: dict, b: list) -> float:
@@ -85,9 +87,9 @@ class Pathfinder:
     def canWalkPath(fr: dict, to: dict) -> bool:
         if Pathfinder.G == None:
             raise Exception("Prepare pathfinding before querying canWalkPath()!")
-        frMap = fr['map'] if type(fr) == dict else fr.map
-        frX = fr['x'] if type(fr) == dict else fr.x
-        frY = fr['y'] if type(fr) == dict else fr.y
+        frMap = fr['map'] if isinstance(fr, dict) else fr.map
+        frX = fr['x'] if isinstance(fr, dict) else fr.x
+        frY = fr['y'] if isinstance(fr, dict) else fr.y
         if frMap != to['map']:
             return False # We can't walk across maps
         
@@ -498,10 +500,10 @@ class Pathfinder:
     @staticmethod
     async def getPath(fr, to, *, avoidTownWarps: bool = False, getWithin: int = None, useBlink: bool = False, costs = {}):
         if not Pathfinder.G:
-            raise Exception("Prepaire pathfinding before querying getPath()!")
-        frMap = fr['map'] if type(fr) == dict else fr.map
-        frX = fr['x'] if type(fr) == dict else fr.x
-        frY = fr['y'] if type(fr) == dict else fr.y
+            raise Exception("Prepare pathfinding before querying getPath()!")
+        frMap = fr['map'] if isinstance(fr, dict) else fr.map
+        frX = fr['x'] if isinstance(fr, dict) else fr.x
+        frY = fr['y'] if isinstance(fr, dict) else fr.y
         if (frMap == to['map']) and (Pathfinder.canWalkPath(fr, to)) and (Tools.distance(fr, to) < Pathfinder.TOWN_COST):
             return [{ 'map': frMap, 'type': 'move', 'x': frX, 'y': frY }, { 'map': to['map'], 'type': 'move', 'x': to['x'], 'y': to['y'] }]
         
@@ -562,9 +564,9 @@ class Pathfinder:
     
     @staticmethod
     def getSafeWalkTo(fr, to):
-        frMap = fr['map'] if type(fr) == dict else fr.map
-        frX = fr['x'] if type(fr) == dict else fr.x
-        frY = fr['y'] if type(fr) == dict else fr.y
+        frMap = fr['map'] if isinstance(fr, dict) else fr.map
+        frX = fr['x'] if isinstance(fr, dict) else fr.x
+        frY = fr['y'] if isinstance(fr, dict) else fr.y
         if frMap != to['map']:
             raise Exception("We can't walk across maps.")
         if not Pathfinder.G:
@@ -652,9 +654,16 @@ class Pathfinder:
     async def prepare(g, *, base = Constants.BASE, cheat = False, include_bank_b = False, include_bank_u = False, include_test = False):
         Pathfinder.G = g
 
+        Pathfinder.logger = logging.getLogger('Pathfinder')
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
+        Pathfinder.logger.addHandler(handler)
+
         maps = [Constants.PATHFINDER_FIRST_MAP]
 
         start = datetime.now()
+        Pathfinder.logger.debug("Preparing Pathfinder...")
 
         i = 0
         while i < len(maps):
@@ -695,6 +704,6 @@ class Pathfinder:
                 else:
                     print('The winterland map has changed, cheat to walk to icegolem is not enabled.')
 
-        print(f"Pathfinding prepared! ({(datetime.now() - start).total_seconds()}s)")
-        print(f"  # Nodes: {len(Pathfinder.graph.vs)}")
-        print(f"  # Links: {len(Pathfinder.graph.es)}")
+        Pathfinder.logger.debug(f"Pathfinding prepared! ({(datetime.now() - start).total_seconds()}s)")
+        Pathfinder.logger.debug(f"  # Nodes: {len(Pathfinder.graph.vs)}")
+        Pathfinder.logger.debug(f"  # Links: {len(Pathfinder.graph.es)}")

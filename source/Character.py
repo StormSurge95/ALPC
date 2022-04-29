@@ -1,19 +1,26 @@
+from functools import reduce
+import logging
+from pprint import pprint
 from Observer import Observer
 from Player import Player
 from Entity import Entity
 from Tools import Tools
 from Constants import Constants
 from Pathfinder import Pathfinder
-from datetime import datetime
+from datetime import datetime, timedelta
 import asyncio
-import logging
 import re
 import sys
 import math
 
 class Character(Observer):
 
-    def __init__(self, userID: str, userAuth: str, characterID: str, g: dict, serverData: dict):
+    def __init__(self, userID: str, userAuth: str, characterID: str, g: dict, serverData: dict, log: bool = False):
+        self.logger = logging.getLogger(characterID)
+        handler = logging.StreamHandler()
+        handler.setLevel(logging.DEBUG)
+        handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
+        self.logger.addHandler(handler)
         self.owner = userID
         self.userAuth = userAuth
         self.characterID = characterID
@@ -24,7 +31,9 @@ class Character(Observer):
         self.bank = {'gold': 0}
         self.achievements = {}
         self.timeouts = {}
-        super().__init__(serverData, g)
+        self.lastSmartMove = datetime.now()
+        self.smartMoving = None
+        super().__init__(serverData, g, log=log)
         return
 
     async def updateLoop(self) -> None:
@@ -130,7 +139,7 @@ class Character(Observer):
         return
 
     def parseGameResponse(self, data) -> None:
-        if type(data) == dict:
+        if isinstance(data, dict):
             if data['response'] == 'cooldown':
                 skill = data.get('skill', data.get('place', None))
                 if skill is not None:
@@ -144,7 +153,7 @@ class Character(Observer):
                 cooldown = self.G['skills'][data['name']]['cooldown']
                 if cooldown is not None:
                     self.setNextSkill(data['name'], datetime.now() + cooldown)
-        elif type(data) == str:
+        elif isinstance(data, str):
             if data == 'resolve_skill':
                 pass # ignore. We resolve our skills a different way than the vanilla client
         return
@@ -242,7 +251,7 @@ class Character(Observer):
         return
 
     def gameErrorHandler(self, data) -> None:
-        if type(data) == str:
+        if isinstance(data, str):
             print(f'Game Error:\n{data}')
         else:
             print('Game Error:')
@@ -312,7 +321,7 @@ class Character(Observer):
                     self.socket.off('disconnect_reason', failCheck2)
                     connected.set_result(value)
             async def failCheck(data):
-                if type(data) == str:
+                if isinstance(data, str):
                     reject(f'Failed to connect: {data}')
                 else:
                     reject(f'Failed to connect: {data["message"]}')
@@ -331,14 +340,13 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return connected.result()
 
-        return await Character.tryExcept(connectedFn)
+        return await Tools.tryExcept(connectedFn)
 
     async def disconnect(self) -> None:
-        print('Disconnecting!')
+        self.logger.info('Disconnecting!')
 
         if self.socket:
             await self.socket.disconnect()
-            await self.socket.eio.http.close()
 
         self.ready = False
 
@@ -347,10 +355,9 @@ class Character(Observer):
         return
 
     async def requestEntitiesData(self) -> dict | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [requestEntitiesData]")
-
         async def entitiesDataFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [requestEntitiesData]")
             entitiesData = asyncio.get_event_loop().create_future()
             def reject(reason):
                 if not entitiesData.done():
@@ -372,14 +379,12 @@ class Character(Observer):
             while not entitiesData.done():
                 await asyncio.sleep(Constants.WAIT)
             return entitiesData.result()
-
-        return await Character.tryExcept(entitiesDataFn)
+        return await Tools.tryExcept(entitiesDataFn)
 
     async def requestPlayerData(self) -> dict | None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [requestPlayerData]")
-
         async def playerDataFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [requestPlayerData]")
             playerData = asyncio.get_event_loop().create_future()
             def resolve(value):
                 if not playerData.done():
@@ -401,7 +406,7 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return playerData.result()
 
-        return await Character.tryExcept(playerDataFn)
+        return await Tools.tryExcept(playerDataFn)
 
     async def acceptFriendRequest(self, id: str) -> dict | None:
         if not self.ready:
@@ -419,7 +424,7 @@ class Character(Observer):
                     resolve(data)
 
             def failCheck(data):
-                if type(data) == str:
+                if isinstance(data, str):
                     if data == 'friend_expired':
                         reject('Friend request expired.')
 
@@ -438,7 +443,7 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return friended.result()
 
-        return await Character.tryExcept(friendReqFn)
+        return await Tools.tryExcept(friendReqFn)
 
     async def acceptMagiport(self, name: str) -> dict | None:
         if not self.ready:
@@ -465,7 +470,7 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return acceptedMagiport.result()
 
-        return await Character.tryExcept(magiportFn)
+        return await Tools.tryExcept(magiportFn)
        
     async def acceptPartyInvite(self, id: str) -> dict | None:
         if not self.ready:
@@ -480,7 +485,7 @@ class Character(Observer):
             def unableCheck(data):
                 if data == 'Invitation expired':
                     reject(data)
-                elif type(data) == str and re.match('^.+? is not found$', data):
+                elif isinstance(data, str) and re.match('^.+? is not found$', data):
                     reject(data)
                 elif data == 'Already partying':
                     if (self.id in self.partyData['list']) and (id in self.partyData['list']):
@@ -507,7 +512,7 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return acceptedInvite.result()
 
-        return await Character.tryExcept(partyInvFn)
+        return await Tools.tryExcept(partyInvFn)
 
     async def acceptPartyRequest(self, id: str) -> dict | None:
         if not self.ready:
@@ -535,7 +540,7 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return acceptedRequest.result()
         
-        return await Character.tryExcept(partyReqFn)
+        return await Tools.tryExcept(partyReqFn)
 
     async def basicAttack(self, id: str) -> str | None:
         if not self.ready:
@@ -561,7 +566,7 @@ class Character(Observer):
                     reject(f'Entity {id} not found')
                 return
             def failCheck(data):
-                if type(data) == dict:
+                if isinstance(data, dict):
                     if data.get('response', None) == 'disabled':
                         reject(f'Attack on {id} failed (disabled).')
                     elif (data.get('response', None) == 'attack_failed') and (data.get('id', None) == id):
@@ -590,7 +595,7 @@ class Character(Observer):
             while not attackStarted.done():
                 await asyncio.sleep(Constants.WAIT)
             return attackStarted.result()
-        return await Character.tryExcept(attackFn)
+        return await Tools.tryExcept(attackFn)
 
     async def buy(self, itemName: str, quantity: int = 1) -> int | None:
         if not self.ready:
@@ -616,7 +621,7 @@ class Character(Observer):
                 for hitchhiker in data['hitchhikers'].values():
                     if hitchhiker[0] == 'game_response':
                         data = hitchhiker[1]
-                        if (type(data) == dict) and (data['response'] == 'buy_success') and (data['name'] == itemName) and (data['q'] == quantity):
+                        if (isinstance(data, dict)) and (data['response'] == 'buy_success') and (data['name'] == itemName) and (data['q'] == quantity):
                             resolve(data['num'])
                 return
             def buyCheck2(data):
@@ -637,7 +642,7 @@ class Character(Observer):
             while not itemReceived.done():
                 await asyncio.sleep(Constants.WAIT)
             return itemReceived.result()
-        return await Character.tryExcept(buyFn)
+        return await Tools.tryExcept(buyFn)
 
     async def buyWithTokens(self, itemName: str) -> None:
         numBefore = self.countItem(itemName)
@@ -678,7 +683,7 @@ class Character(Observer):
                 if numNow > numBefore:
                     resolve(None)
             def failCheck(data):
-                if type(data) == str:
+                if isinstance(data, str):
                     if data == 'exchange_notenough':
                         reject(f'Not enough tokens to buy {itemName}.')
             Tools.setTimeout(reject, Constants.TIMEOUT, f'buyWithTokens timeout ({Constants.TIMEOUT}s)')
@@ -689,7 +694,7 @@ class Character(Observer):
             while not itemReceived.done():
                 await asyncio.sleep(Constants.WAIT)
             return itemReceived.result()
-        return await Character.tryExcept(tokenBuyFn)
+        return await Tools.tryExcept(tokenBuyFn)
 
     async def buyFromMerchant(self, id: str, slot: str, rid: str, quantity: int = 1) -> dict | None:
         if not self.ready:
@@ -743,7 +748,7 @@ class Character(Observer):
             while not itemBought.done():
                 await asyncio.sleep(Constants.WAIT)
             return itemBought.result()
-        return await Character.tryExcept(merchantBuyFn)
+        return await Tools.tryExcept(merchantBuyFn)
 
     async def buyFromPonty(self, item: dict) -> None:
         if not self.ready:
@@ -784,7 +789,7 @@ class Character(Observer):
             while not bought.done():
                 await asyncio.sleep(Constants.WAIT)
             return bought.result()
-        return await Character.tryExcept(pontyBuyFn)
+        return await Tools.tryExcept(pontyBuyFn)
 
     def calculateTargets(self) -> dict[str, int]:
         targets = {
@@ -1088,7 +1093,7 @@ class Character(Observer):
             if self.slots['mainhand'] == None:
                 return False # We don't have any weapon equipped
             gInfoWeapon = self.G['items'][self.slots['mainhand']['name']]
-            if type(gInfoSkill['wtype']) == list:
+            if isinstance(gInfoSkill['wtype'], list):
                 if gInfoWeapon['wtype'] not in gInfoSkill['wtype']:
                     return False
             elif gInfoWeapon['wtype'] != gInfoSkill['wtype']:
@@ -1151,7 +1156,7 @@ class Character(Observer):
             while not closed.done():
                 await asyncio.sleep(Constants.WAIT)
             return closed.result()
-        return await Character.tryExcept(closeFn)
+        return await Tools.tryExcept(closeFn)
 
     async def compound(self, item1Pos: int, item2Pos: int, item3Pos: int, cscrollPos: int, offeringPos: int = None) -> bool | None:
         if not self.ready:
@@ -1203,10 +1208,10 @@ class Character(Observer):
                         break
                 return
             def gameResponseCheck(data):
-                if type(data) == dict:
+                if isinstance(data, dict):
                     if data['response'] == 'bank_restrictions' and data['place'] == 'compound':
                         reject("You can't compound items in the gank.")
-                elif type(data) == str:
+                elif isinstance(data, str):
                     if data == 'compound_no_item':
                         reject()
             Tools.setTimeout(reject, 60, "compound timeout (60s)")
@@ -1220,7 +1225,7 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return compoundComplete.result()
         
-        return await Character.tryExcept(compoundFn)
+        return await Tools.tryExcept(compoundFn)
 
     async def craft(self, item: str) -> None:
         if not self.ready:
@@ -1263,7 +1268,7 @@ class Character(Observer):
                         self.socket.off('game_response', successCheck)
                         crafted.set_result(value)
                 def successCheck(data):
-                    if type(data) == dict:
+                    if isinstance(data, dict):
                         if data['response'] == 'craft' and data['name'] == item:
                             resolve()
                 Tools.setTimeout(reject, Constants.TIMEOUT, f"craft timeout ({Constants.TIMEOUT}s)")
@@ -1273,7 +1278,7 @@ class Character(Observer):
                     await asyncio.sleep(Constants.WAIT)
                 return crafted.result()
             
-        return await Character.tryExcept(craftedFn)
+        return await Tools.tryExcept(craftedFn)
 
     async def depositGold(self, gold: int) -> None:
         if not self.ready:
@@ -1296,10 +1301,10 @@ class Character(Observer):
             raise Exception(f"We're not in the bank (we're in '{self.map}')")
 
         for i in range(0, 20):
-            if self.bank:
+            if Tools.hasKey(self.bank, 'items0'):
                 break
             await asyncio.sleep(250)
-        if not self.bank:
+        if not Tools.hasKey(self.bank, 'items0'):
             raise Exception("We don't have bank information yet. Please try again in a bit.")
         
         item = self.items[inventoryPos]
@@ -1352,7 +1357,7 @@ class Character(Observer):
                 bankPack = emptyPack
                 bankSlot = emptySlot
             elif bankPack == None and bankSlot == None and emptyPack == None and emptySlot == None:
-                raise Exception(f"Bank if sull. There is nowhere to place {item['name']}")
+                raise Exception(f"Bank is full. There is nowhere to place {item['name']}")
         
         bankItemCount = self.countItem(item['name'], self.bank[bankPack])
         async def swapFn():
@@ -1379,7 +1384,7 @@ class Character(Observer):
             while not swapped.done():
                 await asyncio.sleep(Constants.WAIT)
             return swapped.result()
-        return await Character.tryExcept(swapFn)
+        return await Tools.tryExcept(swapFn)
 
     async def emote(self, emotionName) -> None:
         if not self.ready:
@@ -1400,7 +1405,7 @@ class Character(Observer):
                     self.socket.off('emotion', successCheck)
                     emoted.set_result(value)
             def failCheck(data):
-                if type(data) == str:
+                if isinstance(data, str):
                     if data == 'emotion_cooldown':
                         reject('Emotion is on cooldown?')
                     elif data == 'emotion_cant':
@@ -1415,7 +1420,7 @@ class Character(Observer):
             while not emoted.done():
                 await asyncio.sleep(Constants.WAIT)
             return emoted.result()
-        return await Character.tryExcept(emoteFn)
+        return await Tools.tryExcept(emoteFn)
 
     async def enter(self, map: str, instance: str = None):
         if not self.ready:
@@ -1454,7 +1459,7 @@ class Character(Observer):
                 else:
                     reject(f"We are not in {data['name']}, but we should be in {map}.")
             def failCheck(data):
-                if type(data) == str:
+                if isinstance(data, str):
                     if data == 'transport_cant_item':
                         reject(f"We don't have the required item to enter {map}.")
             Tools.setTimeout(reject, Constants.TIMEOUT, f"We don't have the required item to enter {map}.")
@@ -1465,7 +1470,7 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return enterComplete.result()
         
-        return await Character.tryExcept(enterFn)
+        return await Tools.tryExcept(enterFn)
 
     async def equip(self, inventoryPos, equipSlot = None) -> None:
         if not self.ready:
@@ -1507,7 +1512,7 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return equipFinished.result()
         
-        return await Character.tryExcept(equipFn)
+        return await Tools.tryExcept(equipFn)
 
     async def exchange(self, inventoryPos: int) -> None:
         if not self.ready:
@@ -1540,9 +1545,9 @@ class Character(Observer):
                 if startedExchange and not Tools.hasKey(data['q'], 'exchange'):
                     resolve()
             def bankCheck(data):
-                if type(data) == dict and data['response'] == 'bank_restrictions' and data['place'] == 'upgrade':
+                if isinstance(data, dict) and data['response'] == 'bank_restrictions' and data['place'] == 'upgrade':
                     reject("You can't exchange items in the bank.")
-                elif type(data) == str:
+                elif isinstance(data, str):
                     if data == 'exchange_notenough':
                         reject("We don't have enough items to exchange.")
                     elif data == 'exchange_existing':
@@ -1556,7 +1561,7 @@ class Character(Observer):
                 await asyncio.sleep(Constants.WAIT)
             return exchangeFinished.result()
         
-        return await Character.tryExcept(exchangeFn)
+        return await Tools.tryExcept(exchangeFn)
 
     async def finishMonsterHuntQuest(self):
         if not self.ready:
@@ -1593,7 +1598,7 @@ class Character(Observer):
             while not questFinished.done():
                 await asyncio.sleep(Constants.WAIT)
             return questFinished.result()
-        return await Character.tryExcept(questFn)
+        return await Tools.tryExcept(questFn)
 
     def getEntities(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None) -> list[Entity]:
         entities = []
@@ -1746,7 +1751,7 @@ class Character(Observer):
             while not questGot.done():
                 await asyncio.sleep(Constants.WAIT)
             return questGot.result()
-        return await Character.tryExcept(questFn)
+        return await Tools.tryExcept(questFn)
 
     async def getPlayers(self) -> dict:
         if not self.ready:
@@ -1770,7 +1775,7 @@ class Character(Observer):
             while not playersData.done():
                 await asyncio.sleep(Constants.WAIT)
             return playersData.result()
-        return await Character.tryExcept(playersFn)
+        return await Tools.tryExcept(playersFn)
 
     async def getPontyItems(self) -> list[dict]:
         if not self.ready:
@@ -1799,7 +1804,7 @@ class Character(Observer):
             while not pontyItems.done():
                 await asyncio.sleep(Constants.WAIT)
             return pontyItems.result()
-        return await Character.tryExcept(pontyFn)
+        return await Tools.tryExcept(pontyFn)
 
     def getTargetEntity(self) -> Entity:
         return self.entities.get(self.target)
@@ -1828,7 +1833,7 @@ class Character(Observer):
             while not gotData.done():
                 await asyncio.sleep(Constants.WAIT)
             return gotData.result()
-        return await Character.tryExcept(trackerFn)
+        return await Tools.tryExcept(trackerFn)
 
     def isFull(self) -> bool:
         return self.esize == 0
@@ -1861,7 +1866,7 @@ class Character(Observer):
             while not kicked.done():
                 await asyncio.sleep(Constants.WAIT)
             return kicked.result()
-        return await Character.tryExcept(kickFn)
+        return await Tools.tryExcept(kickFn)
 
     async def leaveMap(self) -> None:
         if not self.ready: raise Exception("We aren't ready yet [leaveMap].")
@@ -1881,7 +1886,7 @@ class Character(Observer):
                 else:
                     reject(f"We are now in {data['name']}, but we should be in main")
             def failCheck(data):
-                if type(data) == str:
+                if isinstance(data, str):
                     if data == 'cant_escape':
                         reject(f"Can't escape from current map {self.map}")
             Tools.setTimeout(reject, Constants.TIMEOUT, f"leaveMap timeout ({Constants.TIMEOUT}s)")
@@ -1891,7 +1896,7 @@ class Character(Observer):
             while not leaveComplete.done():
                 await asyncio.sleep(Constants.WAIT)
             return leaveComplete.result()
-        return await Character.tryExcept(leaveFn)
+        return await Tools.tryExcept(leaveFn)
 
     async def leaveParty(self) -> None:
         if not self.ready: raise Exception("We aren't ready yet [leaveParty].")
@@ -1901,7 +1906,7 @@ class Character(Observer):
     async def move(self, x: int, y: int, *, disableSafetyCheck: bool = False, resolveOnStart: bool = False) -> dict[str, int|str]:
         if not self.ready: raise Exception("We aren't ready yet [move].")
         if x == None or y == None: raise Exception("Please provide an x and y coordinate to move.")
-        if not (type(x) == int or type(x) == float) or not (type(y) == int or type(y) == float): raise Exception("Please use a whole number for both x and y.")
+        if not (isinstance(x, int) or isinstance(x, float)) or not (isinstance(y, int) or isinstance(y, float)): raise Exception("Please use a whole number for both x and y.")
 
         to = { 'map': self.map, 'x': x, 'y': y }
         if not disableSafetyCheck:
@@ -1942,8 +1947,9 @@ class Character(Observer):
                     timeToFinishMove = 0.001 + self.ping + Tools.distance(self, { 'x': data['going_x'], 'y': data['going_y'] }) / data['speed']
                     Tools.clearTimeout(timeout)
                     timeout = Tools.setTimeout(checkPosition, timeToFinishMove)
-            
             def checkPosition():
+                nonlocal timeout
+                nonlocal timeToFinishMove
                 if resolveOnStart:
                     resolve({ 'map': self.map, 'x': self.x, 'y': self.y })
                     return
@@ -1968,7 +1974,7 @@ class Character(Observer):
             self.going_y = to['y']
             self.moving = True
 
-        return await Character.tryExcept(moveFn)
+        return await Tools.tryExcept(moveFn)
 
     async def openChest(self, id: str) -> dict:
         if not self.ready: raise Exception("We aren't ready yet [openChest].")
@@ -1991,19 +1997,18 @@ class Character(Observer):
             while not chestOpened.done():
                 await asyncio.sleep(Constants.WAIT)
             return chestOpened.result()
-        return await Character.tryExcept(chestFn)
+        return await Tools.tryExcept(chestFn)
 
     async def openMerchantStand(self) -> None:
-        if not self.ready: raise Exception("We aren't ready yet [openMerchantStand].")
-        if self.stand: return
-
-        stand = None
-        for item in ['supercomputer', 'computer', 'stand1', 'stand0']:
-            stand = self.locateItem(item)
-            if stand != None: break
-        if stand == None: raise Exception("Could not find a suitable merchant stand in inventory.")
-
         async def standFn():
+            if not self.ready: raise Exception("We aren't ready yet [openMerchantStand].")
+            if self.stand: return
+
+            stand = None
+            for item in ['supercomputer', 'computer', 'stand1', 'stand0']:
+                stand = self.locateItem(item)
+                if stand != None: break
+            if stand == None: raise Exception("Could not find a suitable merchant stand in inventory.")
             opened = asyncio.get_event_loop().create_future()
             def reject(reason=None):
                 if not opened.done():
@@ -2022,12 +2027,13 @@ class Character(Observer):
             while not opened.done():
                 await asyncio.sleep(Constants.WAIT)
             return opened.result()
-        return await Character.tryExcept(standFn)
+        return await Tools.tryExcept(standFn)
 
     async def regenHP(self) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [regenHP].")
         async def regenHPFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [regenHP].")
             regenReceived = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not regenReceived.done():
@@ -2052,12 +2058,13 @@ class Character(Observer):
             while not regenReceived.done():
                 await asyncio.sleep(Constants.WAIT)
             return regenReceived.result()
-        return await Character.tryExcept(regenHPFn)
+        return await Tools.tryExcept(regenHPFn)
 
     async def regenMP(self) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [regenHP].")
         async def regenMPFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [regenHP].")
             regenReceived = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not regenReceived.done():
@@ -2082,13 +2089,13 @@ class Character(Observer):
             while not regenReceived.done():
                 await asyncio.sleep(Constants.WAIT)
             return regenReceived.result()
-        return await Character.tryExcept(regenMPFn)
+        return await Tools.tryExcept(regenMPFn)
 
     async def respawn(self, safe: bool = False):
-        if not self.ready:
-            raise Exception("We aren't ready yet [respawn].")
-        
         async def respawnFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [respawn].")
             respawned = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not respawned.done():
@@ -2113,18 +2120,21 @@ class Character(Observer):
             while not respawned.done():
                 await asyncio.sleep(Constants.WAIT)
             return respawned.result()
-        return await Character.tryExcept(respawnFn)
+        return await Tools.tryExcept(respawnFn)
 
     async def scare(self) -> list[str]:
-        if not self.ready:
-            raise Exception("We aren't ready yet [scare].")
         
-        equipped = self.isEquipped('jacko')
-        inInventory = self.hasItem('jacko')
-        if (not equipped) and (not inInventory):
-            raise Exception('You need a jacko to use scare.')
         
         async def scareFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [scare].")
+            
+            equipped = self.isEquipped('jacko')
+            inInventory = self.hasItem('jacko')
+            if (not equipped) and (not inInventory):
+                raise Exception('You need a jacko to use scare.')
+            
             scared = asyncio.get_event_loop().create_future()
             ids = []
             def reject(reason = None):
@@ -2156,20 +2166,22 @@ class Character(Observer):
             while not scared.done():
                 await asyncio.sleep(Constants.WAIT)
             return scared.result()
-        return await Character.tryExcept(scareFn)
+        return await Tools.tryExcept(scareFn)
 
     async def sell(self, itemPos: int, quantity: int = 1) -> bool:
-        if not self.ready:
-            raise Exception("We aren't ready yet [sell].")
-        if self.map in ['bank', 'bank_b', 'bank_u']:
-            raise Exception("We can't sell items in the bank.")
-        item = self.items[itemPos]
-        if item == None:
-            raise Exception(f"We have no item in inventory slot {itemPos} to sell.")
-        if Tools.hasKey(item, 'l'):
-            raise Exception(f"We can't sell {item['name']}, because it is locked.")
-        
         async def sellFn():
+            nonlocal self
+            nonlocal itemPos
+            nonlocal quantity
+            if not self.ready:
+                raise Exception("We aren't ready yet [sell].")
+            if self.map in ['bank', 'bank_b', 'bank_u']:
+                raise Exception("We can't sell items in the bank.")
+            item = self.items[itemPos]
+            if item == None:
+                raise Exception(f"We have no item in inventory slot {itemPos} to sell.")
+            if Tools.hasKey(item, 'l'):
+                raise Exception(f"We can't sell {item['name']}, because it is locked.")
             sold = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not sold.done():
@@ -2188,7 +2200,7 @@ class Character(Observer):
                     else:
                         resolve(True)
             def failCheck(data):
-                if type(data) == str:
+                if isinstance(data, str):
                     if data == 'item_locked':
                         reject(f"We can't sell {item['name']}, because it is locked.")
             Tools.setTimeout(reject, Constants.TIMEOUT, f"sell timeout ({Constants.TIMEOUT}s)")
@@ -2198,28 +2210,33 @@ class Character(Observer):
             while not sold.done():
                 await asyncio.sleep(Constants.WAIT)
             return sold.result()
-        return Character.tryExcept(sellFn)
+        return Tools.tryExcept(sellFn)
 
     async def sellToMerchant(self, id: str, slot: str, rid: str, q: int) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [sellToMerchant].")
-        
-        # Check if the player buying the item is still valid
-        player = self.players.get(id, None)
-        if player == None:
-            raise Exception(f"{id} is not nearby.")
-        
-        item = player.slots[slot]
-        if item == None:
-            raise Exception(f"{id} has no item in slot {slot}")
-        if not Tools.hasKey(item, 'b'):
-            raise Exception(f"{id}'s slot {slot} is not a buy request.")
-        
-        ourItem = self.locateItem(item['name'], self.items, { 'level': item['level'], 'locked': False })
-        if ourItem == None:
-            raise Exception(f"We do not have a {item['name']} to sell to {id}")
-        
         async def sellFn():
+            nonlocal self
+            nonlocal id
+            nonlocal slot
+            nonlocal rid
+            nonlocal q
+            if not self.ready:
+                raise Exception("We aren't ready yet [sellToMerchant].")
+            
+            # Check if the player buying the item is still valid
+            player = self.players.get(id, None)
+            if player == None:
+                raise Exception(f"{id} is not nearby.")
+            
+            item = player.slots[slot]
+            if item == None:
+                raise Exception(f"{id} has no item in slot {slot}")
+            if not Tools.hasKey(item, 'b'):
+                raise Exception(f"{id}'s slot {slot} is not a buy request.")
+            
+            ourItem = self.locateItem(item['name'], self.items, { 'level': item['level'], 'locked': False })
+            if ourItem == None:
+                raise Exception(f"We do not have a {item['name']} to sell to {id}")
+        
             sold = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not sold.done():
@@ -2235,7 +2252,7 @@ class Character(Observer):
                 if data['type'] == "+$$" and data['seller'] == self.id and data['buyer'] == id:
                     resolve()
             def failCheck(data):
-                if type(data) == str:
+                if isinstance(data, str):
                     if data == 'trade_bspace':
                         reject(f"{id} doesn't have enough space, so we can't sell items.")
             
@@ -2248,22 +2265,32 @@ class Character(Observer):
             while not sold.done():
                 await asyncio.sleep(Constants.WAIT)
             return sold.result()
-        return await Character.tryExcept(sellFn)
+        return await Tools.tryExcept(sellFn)
 
     async def sendCM(self, to: list[str], message: str) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [sendCM].")
-        
-        await self.socket.emit('cm', { 'message': message, 'to': to })
+        async def cmFn():
+            nonlocal self
+            nonlocal to
+            nonlocal message
+            if not self.ready:
+                raise Exception("We aren't ready yet [sendCM].")
+            await self.socket.emit('cm', { 'message': message, 'to': to })
+        return await Tools.tryExcept(cmFn)
 
     async def sendMail(self, to: str, subject: str, message: str, item = False) -> None:
-        self.socket.emit('mail', { 'item': item, 'message': message, 'subject': subject, 'to': to })
+        async def mailFn():
+            nonlocal self
+            nonlocal to
+            nonlocal subject
+            nonlocal message
+            nonlocal item
+            await self.socket.emit('mail', { 'item': item, 'message': message, 'subject': subject, 'to': to })
+        return await Tools.tryExcept(mailFn)
 
     async def sendPM(self, to: str, message: str) -> bool:
-        if not self.ready:
-            raise Exception("We aren't ready yet [sendPM].")
-        
         async def sendFn():
+            if not self.ready:
+                raise Exception("We aren't ready yet [sendPM].")
             sent = asyncio.get_event_loop().create_future()
             isReceived = False
             def reject(reason: str = None):
@@ -2292,13 +2319,14 @@ class Character(Observer):
             while not sent.done():
                 await asyncio.sleep(Constants.WAIT)
             return sent.result()
-        return await Character.tryExcept(sendFn)
+        return await Tools.tryExcept(sendFn)
 
     async def say(self, message: str) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [say].")
-        
         async def sentFn():
+            nonlocal self
+            nonlocal message
+            if not self.ready:
+                raise Exception("We aren't ready yet [say].")
             sent = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not sent.done():
@@ -2323,13 +2351,14 @@ class Character(Observer):
             while not sent.done():
                 await asyncio.sleep(Constants.WAIT)
             return sent.result()
-        return await Character.tryExcept(sentFn)
+        return await Tools.tryExcept(sentFn)
 
     async def sendFriendRequest(self, id: str) -> None:
-        if not self.ready:
-            raise Exception("We aren't ready yet [sendFriendRequest].")
-        
         async def friendRequestFn():
+            nonlocal self
+            nonlocal id
+            if not self.ready:
+                raise Exception("We aren't ready yet [sendFriendRequest].")
             requestSent = asyncio.get_event_loop().create_future()
             def reject(reason=None):
                 nonlocal requestSent
@@ -2342,7 +2371,7 @@ class Character(Observer):
                     self.socket.off('game_response', check)
                     requestSent.set_result(value)
             def check(data):
-                if type(data) == str:
+                if isinstance(data, str):
                     if data == 'friend_already' or data == 'friend_rsent':
                         resolve()
                     elif data == 'friend_rleft':
@@ -2353,32 +2382,38 @@ class Character(Observer):
             while not requestSent.done():
                 await asyncio.sleep(Constants.WAIT)
             return requestSent.result()
-        return await Character.tryExcept(friendRequestFn)
+        return await Tools.tryExcept(friendRequestFn)
 
     async def sendGold(self, to: str, amount: int) -> int:
-        if not self.ready:
-            raise Exception("We aren't ready yet [sendGold].")
-        if self.gold == 0:
-            raise Exception("We have no gold to send.")
-        if not Tools.hasKey(self.players, to):
-            raise Exception(f"We can't se {to} nearby to send gold.")
-        if Tools.distance(self, self.players.get(to)) > Constants.NPC_INTERACTION_DISTANCE:
-            raise Exception(f"We are too far away from {to} to send gold.")
-
         async def sendFn():
+            nonlocal self
+            nonlocal to
+            nonlocal amount
+            if not self.ready:
+                raise Exception("We aren't ready yet [sendGold].")
+            if self.gold == 0:
+                raise Exception("We have no gold to send.")
+            if not Tools.hasKey(self.players, to):
+                raise Exception(f"We can't se {to} nearby to send gold.")
+            if Tools.distance(self, self.players.get(to)) > Constants.NPC_INTERACTION_DISTANCE:
+                raise Exception(f"We are too far away from {to} to send gold.")
             goldSent = asyncio.get_event_loop().create_future()
             def reject(reason = None):
+                nonlocal self
+                nonlocal goldSent
                 if not goldSent.done():
                     self.socket.off('game_response', sentCheck)
                     goldSent.set_exception(Exception(reason))
             def resolve(value = None):
+                nonlocal self
+                nonlocal goldSent
                 if not goldSent.done():
                     self.socket.off('game_response', sentCheck)
                     goldSent.set_result(value)
             def sentCheck(data):
                 if data == 'trade_get_closer':
                     reject(f"We are too far away from {to} to send gold.")
-                elif type(data) == dict and data['response'] == 'gold_sent' and data['name'] == to:
+                elif isinstance(data, dict) and data['response'] == 'gold_sent' and data['name'] == to:
                     if data['gold'] != amount:
                         print(f"We wanted to send {to} {amount} gold, but we sent {data['gold']}.")
                     resolve(data['gold'])
@@ -2388,52 +2423,146 @@ class Character(Observer):
             while not goldSent.done():
                 await asyncio.sleep(Constants.WAIT)
             return goldSent.result()
-        return await Character.tryExcept(sendFn)
+        return await Tools.tryExcept(sendFn)
 
     async def sendItem(self, to: str, inventoryPos: int, quantity: int = 1) -> None:
-        pass
+        async def sendFn():
+            nonlocal self
+            nonlocal inventoryPos
+            nonlocal quantity
+            if not self.ready:
+                raise Exception("We aren't ready yet [sendItem].")
+            if not Tools.hasKey(self.players, to):
+                raise Exception(f"{to} is not nearby.")
+            item = self.items[inventoryPos]
+            if item == None:
+                raise Exception(f"No item in inventory slot {inventoryPos}.")
+            if item['q'] < quantity:
+                raise Exception(f"We only have a quantity of {item['q']}, not {quantity}.")
+            itemSent = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                if not itemSent.done():
+                    self.socket.off('game_response', sentCheck)
+                    itemSent.set_exception(Exception(reason))
+            def resolve(value = None):
+                if not itemSent.done():
+                    self.socket.off('game_response', sentCheck)
+                    itemSent.set_result(value)
+            def sentCheck(data):
+                if data == 'trade_get_closer':
+                    reject(f"sendItem failed, {to} is too far away")
+                elif data == 'send_no_space':
+                    reject(f"sendItem failed, {to} has no inventory space")
+                elif isinstance(data, dict) and data['response'] == 'item_sent' and data['name'] == to and data['item'] == item['name'] and data['q'] == quantity:
+                    resolve()
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"sendItem timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('game_response', sentCheck)
+            await self.socket.emit('send', { 'name': to, 'num': inventoryPos, 'q': quantity })
+            while not itemSent.done():
+                await asyncio.sleep(Constants.WAIT)
+            return itemSent.result()
+        return await Tools.tryExcept(sendFn)
 
     async def sendPartyInvite(self, id: str) -> None:
-        pass
+        async def inviteFn():
+            nonlocal self
+            nonlocal id
+            if not self.ready:
+                raise Exception("We aren't ready yet [sendPartyInvite].")
+            invited = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal invited
+                if not invited.done():
+                    self.socket.off('game_log', sentCheck)
+                    invited.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal invited
+                if not invited.done():
+                    self.socket.off('game_log', sentCheck)
+                    invited.set_result(value)
+            def sentCheck(data):
+                if data == f"Invited {id} to party":
+                    resolve()
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"sendPartyInvite timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('game_log', sentCheck)
+            await self.socket.emit('party', { 'event': 'invite', 'name': id })
+            while not invited.done():
+                await asyncio.sleep(Constants.WAIT)
+            return invited.result()
+        return await Tools.tryExcept(inviteFn)
 
     async def sendPartyRequest(self, id: str) -> None:
-        pass
+        async def sendFn():
+            nonlocal self
+            nonlocal id
+            if not self.ready:
+                raise Exception("We aren't ready yet [sendPartyRequest].")
+            await self.socket.emit('party', { 'event': 'request', 'name': 'id' })
+        return await Tools.tryExcept(sendFn)
 
-    async def shiftBooster(booster: int, to: str) -> None:
-        pass
+    async def shiftBooster(self, booster: int, to: str) -> None:
+        async def shiftFn():
+            nonlocal self
+            nonlocal booster
+            nonlocal to
+            if not self.ready:
+                raise Exception("We aren't ready yet [shiftBooster].")
+            if to not in ['goldbooster', 'luckbooster', 'xpbooster']:
+                raise ValueError(f"'to' value must be 'goldbooster', 'luckbooster', or 'xpbooster' but is '{to}'")
+            itemInfo = self.items[booster]
+            if itemInfo == None:
+                raise Exception(f"Inventory slot {booster} is empty.")
+            if itemInfo['name'] not in ['goldbooster', 'luckbooster', 'xpbooster']:
+                raise Exception(f"The given item is not a booster (it's a '{itemInfo['name']}')")
+            await self.socket.emit('booster', { 'action': 'shift', 'num': booster, 'to': to })
+        return await Tools.tryExcept(shiftFn)
 
-    lastSmartMove = datetime.now()
-    smartMoving = None
     async def smartMove(self, to, *, avoidTownWarps: bool = False, getWithin: int = 0, useBlink: bool = False, costs: dict = None) -> dict[str, int | str]:
-        if not self.ready:
-            raise Exception("We aren't ready yet [smartMove].")
-        
-        if self.rip:
-            raise Exception("We can't smartMove; we are dead.")
+        async def smartMoveFn():
+            nonlocal self
+            nonlocal to
+            nonlocal avoidTownWarps
+            nonlocal getWithin
+            nonlocal useBlink
+            nonlocal costs
+            if not self.ready:
+                raise Exception("We aren't ready yet [smartMove].")
+            if self.rip:
+                raise Exception("We can't smartMove; we are dead.")
+            if costs == None:
+                costs = {}
+            if (not Tools.hasKey(costs, 'blink')) or costs['blink'] == None:
+                costs['blink'] = self.speed * 3.2 + 250
+            if (not Tools.hasKey(costs, 'town')) or costs['town'] == None:
+                costs['town'] = self.speed * (4 + (min(self.ping, 1) / 0.5))
+            if (not Tools.hasKey(costs, 'transport')) or costs['transport'] == None:
+                costs['transport'] = self.speed * (min(self.ping, 1) / 0.5)
+            fixedTo = {}
+            path = []
+            if isinstance(to, str):
+                # Check if destination is a map name
+                gMap = self.G['maps'].get(to, None)
+                if gMap != None:
+                    mainSpawn = gMap['spawns'][0]
+                    fixedTo = { 'map': to, 'x': mainSpawn[0], 'y': mainSpawn[1] }
+                
+                # Check if destination is a monster type
+                if not fixedTo:
+                    gMonster = self.G['monsters'].get(to, None)
+                    if gMonster != None:
+                        locations = self.locateMonster(to)
+                        closestDistance = sys.maxsize
+                        for location in locations:
+                            potentialPath = await Pathfinder.getPath(self, location, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
+                            distance = Pathfinder.computePathCost(potentialPath)
+                            if distance < closestDistance:
+                                path = potentialPath
+                                fixedTo = path[len(path) - 1]
+                                closestDistance = distance
 
-        if costs == None:
-            costs = {}
-        if (not Tools.hasKey(costs, 'blink')) or costs['blink'] == None:
-            costs['blink'] = self.speed * 3.2 + 250
-        if (not Tools.hasKey(costs, 'town')) or costs['town'] == None:
-            costs['town'] = self.speed * (4 + (min(self.ping, 1) / 0.5))
-        if (not Tools.hasKey(costs, 'transport')) or costs['transport'] == None:
-            costs['transport'] = self.speed * (min(self.ping, 1) / 0.5)
-        
-        fixedTo = {}
-        path = []
-        if type(to) == str:
-            # Check if destination is a map name
-            gMap = self.G['maps'].get(to, None)
-            if gMap != None:
-                mainSpawn = gMap['spawns'][0]
-                fixedTo = { 'map': to, 'x': mainSpawn[0], 'y': mainSpawn[1] }
-            
-            # Check if destination is a monster type
-            if not fixedTo:
-                gMonster = self.G['monsters'].get(to, None)
-                if gMonster != None:
-                    locations = self.locateMonster(to)
+                # Check if destination is an npc role
+                if not fixedTo:
+                    locations = self.locateNPC(to)
                     closestDistance = sys.maxsize
                     for location in locations:
                         potentialPath = await Pathfinder.getPath(self, location, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
@@ -2442,202 +2571,335 @@ class Character(Observer):
                             path = potentialPath
                             fixedTo = path[len(path) - 1]
                             closestDistance = distance
-
-            # Check if destination is an npc role
-            if not fixedTo:
-                locations = self.locateNPC(to)
-                closestDistance = sys.maxsize
-                for location in locations:
-                    potentialPath = await Pathfinder.getPath(self, location, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
-                    distance = Pathfinder.computePathCost(potentialPath)
-                    if distance < closestDistance:
-                        path = potentialPath
-                        fixedTo = path[len(path) - 1]
-                        closestDistance = distance
-            
-            # Check if destination is an item name. If so, go to NPC that sells it.
-            if not fixedTo:
-                gItem = self.G['items'].get(to, None)
-                if gItem != None:
-                    for map in self.G['maps'].values():
-                        if Tools.hasKey(map, 'ignore'): continue
-                        for npc in map['npcs'].values():
-                            if not Tools.hasKey(npc, 'items'): continue
-                            for item in self.G['npcs'][npc['id']]['items'].values():
-                                if item == to:
-                                    return self.smartMove(npc['id'], avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
-            
-            if not fixedTo:
-                raise Exception(f"Could not find a suitable destination for '{to}'")
-        elif Tools.hasKey(to, 'x') and Tools.hasKey(to, 'y'):
-            fixedTo = { 'map': to['map'] if Tools.hasKey(to, 'map') else self.map, 'x': to['x'], 'y': to['y'] }
-        else:
-            print(to)
-            raise Exception("'to' is unsuitable for smartMove. We need a 'map', an 'x', and a 'y'.")
-
-        distance = Tools.distance(self, fixedTo)
-        if distance == 0: return fixedTo
-        if getWithin >= distance: return { 'map': self.map, 'x': self.x, 'y': self.y }
-
-        self.smartMoving = fixedTo
-        try:
-            if not path:
-                path = await Pathfinder.getPath(self, fixedTo, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
-        except Exception as e:
-            self.smartMoving = None
-            raise e
-        
-        started = datetime.now()
-        self.lastSmartMove = started
-        numAttempts = 0
-        i = 0
-        while i < len(path):
-            currentMove = path[i]
-
-            if started != self.lastSmartMove:
-                if type(to) == str:
-                    raise Exception(f"smartMove to {to} cancelled (new smartMove started)")
-                else:
-                    raise Exception(f"smartMove to {to['map']}:{to['x']},{to['y']} cancelled (new smartMove started)")
-            
-            if self.rip:
-                raise Exception("We died while smartMoving")
-            
-            if getWithin >= Tools.distance(self, fixedTo):
-                break # We're already close enough
                 
-            # conditional?
+                # Check if destination is an item name. If so, go to NPC that sells it.
+                if not fixedTo:
+                    gItem = self.G['items'].get(to, None)
+                    if gItem != None:
+                        for map in self.G['maps'].values():
+                            if Tools.hasKey(map, 'ignore'): continue
+                            for npc in map['npcs'].values():
+                                if not Tools.hasKey(npc, 'items'): continue
+                                for item in self.G['npcs'][npc['id']]['items'].values():
+                                    if item == to:
+                                        return self.smartMove(npc['id'], avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
+                
+                if not fixedTo:
+                    raise Exception(f"Could not find a suitable destination for '{to}'")
+            elif Tools.hasKey(to, 'x') and Tools.hasKey(to, 'y'):
+                fixedTo = { 'map': to['map'] if Tools.hasKey(to, 'map') else self.map, 'x': to['x'], 'y': to['y'] }
+            else:
+                print(to)
+                raise Exception("'to' is unsuitable for smartMove. We need a 'map', an 'x', and a 'y'.")
+            distance = Tools.distance(self, fixedTo)
+            if distance == 0: return fixedTo
+            if getWithin >= distance: return { 'map': self.map, 'x': self.x, 'y': self.y }
+            self.smartMoving = fixedTo
+            try:
+                if not path:
+                    path = await Pathfinder.getPath(self, fixedTo, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
+            except Exception as e:
+                self.smartMoving = None
+                raise e
+            started = datetime.now()
+            self.lastSmartMove = started
+            numAttempts = 0
+            i = 0
+            while i < len(path):
+                currentMove = path[i]
 
-            # 'getWithin' Check
-            if currentMove['type'] == 'move' and self.map == fixedTo['map'] and getWithin > 0:
-                angle = math.atan2(self.y - fixedTo['y'], self.x - fixedTo['x'])
-                potentialMove = { 'map': self.map, 'type': 'move', 'x': fixedTo['x'] + math.cos(angle) * getWithin, 'y': fixedTo['y'] + math.sin(angle) * getWithin }
-                if Pathfinder.canWalkPath(self, potentialMove):
-                    i = len(path)
-                    currentMove = potentialMove
-            
-            # Shortcut Check
-            if currentMove['type'] == 'move':
-                j = i + 1
-                while j < len(path):
-                    potentialMove = path[j]
-                    if potentialMove['map'] != currentMove['map']: break
-                    if potentialMove['type'] == 'town': break
-                    if potentialMove['type'] == 'move' and Pathfinder.canWalkPath(self, potentialMove):
-                        i = j
+                if started != self.lastSmartMove:
+                    if isinstance(to, str):
+                        raise Exception(f"smartMove to {to} cancelled (new smartMove started)")
+                    else:
+                        raise Exception(f"smartMove to {to['map']}:{to['x']},{to['y']} cancelled (new smartMove started)")
+                
+                if self.rip:
+                    raise Exception("We died while smartMoving")
+                
+                if getWithin >= Tools.distance(self, fixedTo):
+                    break # We're already close enough
+                    
+                # conditional?
+
+                # 'getWithin' Check
+                if currentMove['type'] == 'move' and self.map == fixedTo['map'] and getWithin > 0:
+                    angle = math.atan2(self.y - fixedTo['y'], self.x - fixedTo['x'])
+                    potentialMove = { 'map': self.map, 'type': 'move', 'x': fixedTo['x'] + math.cos(angle) * getWithin, 'y': fixedTo['y'] + math.sin(angle) * getWithin }
+                    if Pathfinder.canWalkPath(self, potentialMove):
+                        i = len(path)
                         currentMove = potentialMove
-                    j += 1
-            
-            # Blink Check
-            if useBlink and self.canUse('blink'):
-                blinked = False
-                j = len(path) - 1
-                while j > i:
-                    potentialMove = path[j]
-                    if potentialMove['map'] != self.map:
-                        j -= 1
-                        continue
-                    if Tools.distance(currentMove, potentialMove) < costs['blink']: break
+                
+                # Shortcut Check
+                if currentMove['type'] == 'move':
+                    j = i + 1
+                    while j < len(path):
+                        potentialMove = path[j]
+                        if potentialMove['map'] != currentMove['map']: break
+                        if potentialMove['type'] == 'town': break
+                        if potentialMove['type'] == 'move' and Pathfinder.canWalkPath(self, potentialMove):
+                            i = j
+                            currentMove = potentialMove
+                        j += 1
+                
+                # Blink Check
+                if useBlink and self.canUse('blink'):
+                    blinked = False
+                    j = len(path) - 1
+                    while j > i:
+                        potentialMove = path[j]
+                        if potentialMove['map'] != self.map:
+                            j -= 1
+                            continue
+                        if Tools.distance(currentMove, potentialMove) < costs['blink']: break
 
-                    roundedMove = {}
-                    for [dX, dY] in [[0, 0], [-10, 0], [10, 0], [0, -10], [0, 10], [-10, -10], [-10, 10], [10, -10], [10, 10]]:
-                        roundedX = round((potentialMove['x'] + dX) / 10) * 10
-                        roundedY = round((potentialMove['y'] + dY) / 10) * 10
-                        if not Pathfinder.canStand({ 'map': potentialMove['map'], 'x': roundedX, 'y': roundedY }):
+                        roundedMove = {}
+                        for [dX, dY] in [[0, 0], [-10, 0], [10, 0], [0, -10], [0, 10], [-10, -10], [-10, 10], [10, -10], [10, 10]]:
+                            roundedX = round((potentialMove['x'] + dX) / 10) * 10
+                            roundedY = round((potentialMove['y'] + dY) / 10) * 10
+                            if not Pathfinder.canStand({ 'map': potentialMove['map'], 'x': roundedX, 'y': roundedY }):
+                                j -= 1
+                                continue
+
+                            roundedMove = { 'map': potentialMove['map'], 'x': roundedX, 'y': roundedY }
+                            break
+                        if not roundedMove:
                             j -= 1
                             continue
 
-                        roundedMove = { 'map': potentialMove['map'], 'x': roundedX, 'y': roundedY }
-                        break
-                    if not roundedMove:
-                        j -= 1
-                        continue
-
-                    try:
-                        await self.blink(roundedMove['x'], roundedMove['y'])
-                    except Exception as e:
-                        if not self.canUse('blink'): break
-                        print(f"Error blinking while smartMoving: {e}, attempting 1 more time")
                         try:
-                            await asyncio.sleep(Constants.TIMEOUT / 1000)
                             await self.blink(roundedMove['x'], roundedMove['y'])
-                        except Exception as e2:
-                            print(f"Failed blinking while smartMoving: {e2}")
-                            break
-                    await self.stopWarpToTown()
-                    i = j - 1
-                    blinked = True
-                    break
-                if blinked:
-                    i += 1
-                    continue
-            
-            # Town Check
-            j = i + 1
-            while j < len(path):
-                futureMove = path[j]
-                if currentMove['map'] != futureMove['map']: break
-                if futureMove['type'] == 'town':
-                    await self.warpToTown()
-                    i = j - 1
-                    break
-                j += 1
-            
-            try:
-                if currentMove['type'] == 'enter':
-                    pass
-                elif currentMove['type'] == 'leave':
-                    await self.leaveMap()
-                elif currentMove['type'] == 'move':
-                    if currentMove['map'] != self.map:
-                        raise Exception(f"We are supposed to be in {currentMove['map']}, but we are in {self.map}")
-                    await self.move(currentMove['x'], currentMove['y'], disableSafetyCheck=True)
-                elif currentMove['type'] == 'town':
-                    await self.warpToTown()
-                elif currentMove['type'] == 'transport':
-                    await self.transport(currentMove['map'], currentMove['spawn'])
-            except Exception as e:
-                print(e)
-                numAttempts += 1
-                if numAttempts >= 3:
-                    self.smartMoving = None
-                    raise Exception("We are having some trouble smartMoving...")
+                        except Exception as e:
+                            if not self.canUse('blink'): break
+                            print(f"Error blinking while smartMoving: {e}, attempting 1 more time")
+                            try:
+                                await asyncio.sleep(Constants.TIMEOUT / 1000)
+                                await self.blink(roundedMove['x'], roundedMove['y'])
+                            except Exception as e2:
+                                print(f"Failed blinking while smartMoving: {e2}")
+                                break
+                        await self.stopWarpToTown()
+                        i = j - 1
+                        blinked = True
+                        break
+                    if blinked:
+                        i += 1
+                        continue
                 
-                await self.stopWarpToTown()
-                await self.requestPlayerData()
-                path = await Pathfinder.getPath(self, fixedTo, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
-                i = -1
-                await asyncio.sleep(Constants.TIMEOUT / 1000)
-            i += 1
-        self.smartMoving = None
-        await self.stopWarpToTown()
-        return { 'map': self.map, 'x': self.x, 'y': self.y }
+                # Town Check
+                j = i + 1
+                while j < len(path):
+                    futureMove = path[j]
+                    if currentMove['map'] != futureMove['map']: break
+                    if futureMove['type'] == 'town':
+                        await self.warpToTown()
+                        i = j - 1
+                        break
+                    j += 1
+                
+                try:
+                    if currentMove['type'] == 'enter':
+                        pass
+                    elif currentMove['type'] == 'leave':
+                        await self.leaveMap()
+                    elif currentMove['type'] == 'move':
+                        if currentMove['map'] != self.map:
+                            raise Exception(f"We are supposed to be in {currentMove['map']}, but we are in {self.map}")
+                        await self.move(currentMove['x'], currentMove['y'], disableSafetyCheck=True)
+                    elif currentMove['type'] == 'town':
+                        await self.warpToTown()
+                    elif currentMove['type'] == 'transport':
+                        await self.transport(currentMove['map'], currentMove['spawn'])
+                except Exception as e:
+                    print(e)
+                    numAttempts += 1
+                    if numAttempts >= 3:
+                        self.smartMoving = None
+                        raise Exception("We are having some trouble smartMoving...")
+                    
+                    await self.stopWarpToTown()
+                    await self.requestPlayerData()
+                    path = await Pathfinder.getPath(self, fixedTo, avoidTownWarps=avoidTownWarps, getWithin=getWithin, useBlink=useBlink, costs=costs)
+                    i = -1
+                    await asyncio.sleep(Constants.TIMEOUT / 1000)
+                i += 1
+            self.smartMoving = None
+            await self.stopWarpToTown()
+            return { 'map': self.map, 'x': self.x, 'y': self.y }
+        return await Tools.tryExcept(smartMoveFn)
 
     async def startKonami(self) -> str:
-        pass
+        async def startFn():
+            started = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal started
+                if not started.done():
+                    self.socket.off('game_response', successCheck)
+                    started.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal started
+                if not started.done():
+                    self.socket.off('game_response', successCheck)
+                    started.set_result(value)
+            def successCheck(data):
+                if not isinstance(data, dict):
+                    return
+                if data['response'] != 'target_lock':
+                    return
+                resolve(data['monster'])
+            Tools.setTimeout(reject, 5, "startKonami timeout (5s)")
+            self.socket.on('game_response', successCheck)
+            await self.socket.emit('move', { 'key': 'up' })
+            await self.socket.emit('move', { 'key': 'up' })
+            await self.socket.emit('move', { 'key': 'down' })
+            await self.socket.emit('move', { 'key': 'down' })
+            await self.socket.emit('move', { 'key': 'left' })
+            await self.socket.emit('move', { 'key': 'right' })
+            await self.socket.emit('move', { 'key': 'left' })
+            await self.socket.emit('move', { 'key': 'right' })
+            await self.socket.emit('interaction', { 'key': 'B' })
+            await self.socket.emit('interaction', { 'key': 'A' })
+            await self.socket.emit('interaction', { 'key': 'enter' })
+            while not started.done():
+                await asyncio.sleep(Constants.WAIT)
+            return started.result()
+        return await Tools.tryExcept(startFn)
 
     async def stopSmartMove(self) -> dict[str, int|str]:
-        pass
+        async def stopMoveFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [stopSmartMove].")
+            self.smartMoving = None
+            self.lastSmartMove = datetime.now()
+            if Tools.hasKey(self.c, 'town'):
+                await self.stopWarpToTown()
+            return await self.move(self.x, self.y)
+        return await Tools.tryExcept(stopMoveFn)
 
     async def stopWarpToTown(self) -> None:
-        pass
+        async def stopWarpFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [stopWarpToTown].")
+            await self.socket.emit('stop', { 'action': 'town' })
+            return
+        return await Tools.tryExcept(stopWarpFn)
 
     async def swapItems(self, itemPosA: int, itemPosB: int) -> None:
-        pass
+        async def swapFn():
+            nonlocal self
+            nonlocal itemPosA
+            nonlocal itemPosB
+            if not self.ready:
+                raise Exception("We aren't ready yet [swapItems].")
+            if itemPosA == itemPosB:
+                return
+            itemDataA = self.items[itemPosA]
+            itemDataB = self.items[itemPosB]
+            itemsSwapped = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal itemsSwapped
+                if not itemsSwapped.done():
+                    self.socket.off('player', successCheck)
+                    itemsSwapped.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal itemsSwapped
+                if not itemsSwapped.done():
+                    self.socket.off('player', successCheck)
+                    itemsSwapped.set_result(value)
+            def successCheck(data):
+                nonlocal itemDataA
+                nonlocal itemDataB
+                checkItemDataA = data['items'][itemPosA]
+                checkItemDataB = data['items'][itemPosB]
+
+                if checkItemDataB == itemDataA and checkItemDataA == itemDataB:
+                    resolve()
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"swapItems timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('player', successCheck)
+            await self.socket.emit('imove', { 'a': itemPosA, 'b': itemPosB })
+            while not itemsSwapped.done():
+                await asyncio.sleep(Constants.WAIT)
+            return itemsSwapped.result()
+        return await Tools.tryExcept(swapFn)
 
     async def takeMailItem(self, mailID: str) -> None:
-        pass
+        async def getItemFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [takeMailItem].")
+            itemReceived = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal itemReceived
+                if not itemReceived.done():
+                    self.socket.off('game_response', successCheck)
+                    itemReceived.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal itemReceived
+                if not itemReceived.done():
+                    self.socket.off('game_response', successCheck)
+                    itemReceived.set_result(value)
+            def successCheck(data):
+                if isinstance(data, dict):
+                    if data['response'] == 'mail_item_taken':
+                        resolve()
+            Tools.setTimeout(reject, 5, f"takeMailItem timeout (5s)")
+            self.socket.on('game_response', successCheck)
+            await self.socket.emit('mail_take_item', { 'id': mailID })
+            while not itemReceived.done():
+                await asyncio.sleep(Constants.WAIT)
+            return itemReceived.result()
+        return await Tools.tryExcept(getItemFn)
 
     async def throwSnowball(self, target: str, snowball: int = None) -> str:
-        if snowball == None:
-            snowball = self.locateItem('snowball')
-        pass
+        async def throwFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [throwSnowball].")
+            if snowball == None:
+                snowball = self.locateItem('snowball')
+            if self.G['skills']['snowball']['mp'] > self.mp:
+                raise Exception("Not enough MP to throw a snowball.")
+            if snowball == None:
+                raise Exception("We don't have any snowballs in our inventory.")
+            throwStarted = asyncio.get_event_loop().create_future()
+            projectile = ''
+            def reject(reason = None):
+                nonlocal throwStarted
+                if not throwStarted.done():
+                    self.socket.off('action', attackCheck)
+                    self.socket.off('eval', cooldownCheck)
+                    throwStarted.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal throwStarted
+                if not throwStarted.done():
+                    self.socket.off('action', attackCheck)
+                    self.socket.off('eval', cooldownCheck)
+                    throwStarted.set_result(value)
+            def attackCheck(data):
+                nonlocal projectile
+                if data['attacker'] == self.id and data['type'] == 'snowball' and data['target'] == target:
+                    projectile = data['pid']
+            def cooldownCheck(data):
+                nonlocal projectile
+                match = re.search('skill_timeout\s*\(\s*[\'"]snowball[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
+                if match != None:
+                    resolve(projectile)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"throwSnowball timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('action', attackCheck)
+            self.socket.on('eval', cooldownCheck)
+            await self.socket.emit('skill', { 'id': target, 'name': 'snowball', 'num': snowball })
+            while not throwStarted.done():
+                await asyncio.sleep(Constants.WAIT)
+            return throwStarted.result()
+        return await Tools.tryExcept(throwFn)
 
     async def transport(self, map: str, spawn: int):
-        if not self.ready:
-            raise Exception("We aren't ready yet [transport].")
-        
         async def transportFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [transport].")
             transportComplete = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 if not transportComplete.done():
@@ -2655,10 +2917,10 @@ class Character(Observer):
                 else:
                     reject(f"We are now in {data['name']}, but we should be in {map}")
             def failCheck(data):
-                if type(data) == dict:
+                if isinstance(data, dict):
                     if data['response'] == 'bank_opx' and data['reason'] == 'mounted':
                         reject(f"{data['name']} is currently in the bank, we can't enter.")
-                elif type(data) == str:
+                elif isinstance(data, str):
                     if data == "cant_enter":
                         reject(f"The door to spawn {spawn} on {map} requires a key. Use 'enter' instead of 'transport'.")
                     elif data == 'transport_cant_locked':
@@ -2672,33 +2934,275 @@ class Character(Observer):
             while not transportComplete.done():
                 await asyncio.sleep(Constants.WAIT)
             return transportComplete.result()
-        return await Character.tryExcept(transportFn)
+        return await Tools.tryExcept(transportFn)
 
     async def unequip(self, slot: str):
-        pass
+        async def unequipFn():
+            nonlocal self
+            nonlocal slot
+            if not self.ready:
+                raise Exception("We aren't ready yet [unequip].")
+            if not Tools.hasKey(self.slots, slot):
+                raise Exception(f"Slot {slot} does not exist.")
+            if self.slots[slot] == None:
+                raise Exception(f"Slot {slot} is empty; nothing to unequip.")
+            if self.esize == 0:
+                raise Exception(f"Our inventory is full. We cannot unequip {slot}.")
+            
+            slotInfo = self.slots[slot]
+
+            unequipped = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal unequipped
+                if not unequipped.done():
+                    self.socket.off('player', unequipCheck)
+                    unequipped.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal unequipped
+                if not unequipped.done():
+                    self.socket.off('player', unequipCheck)
+                    unequipped.set_result(value)
+            def unequipCheck(data):
+                nonlocal slot
+                nonlocal slotInfo
+                if data['slots'][slot] == None:
+                    inventorySlot = None
+                    for i in range(data['isize'] - 1, 0, -1):
+                        item = data['items'][i]
+                        if item == None:
+                            continue
+                        same = True
+                        for key in slotInfo:
+                            if key in ['b', 'grace', 'price', 'rid']:
+                                continue
+                            if item[key] != slotInfo[key]:
+                                same = False
+                                break
+                        if same:
+                            inventorySlot = i
+                            break
+                    if inventorySlot != None:
+                        resolve(inventorySlot)
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"unequip timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('player', unequipCheck)
+            await self.socket.emit('unequip', { 'slot': slot })
+            while not unequipped.done():
+                await asyncio.sleep(Constants.WAIT)
+            return unequipped.result()
+        return await Tools.tryExcept(unequipFn)
 
     async def unfriend(self, id: str):
-        pass
+        async def unfriendFn():
+            nonlocal self
+            nonlocal id
+            if not self.ready:
+                raise Exception("We aren't ready yet [unfriend].")
+            unfriended = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal unfriended
+                if not unfriended.done():
+                    self.socket.off('friend', check)
+                    self.socket.off('game_response', failCheck)
+                    unfriended.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal unfriended
+                if not unfriended.done():
+                    self.socket.off('friend', check)
+                    self.socket.off('game_response', failCheck)
+                    unfriended.set_result(value)
+            def failCheck(data):
+                if isinstance(data, dict):
+                    if data['response'] == 'unfriend_failed':
+                        reject(f"unfriend failed ({data['reason']})")
+            def check(data):
+                if data['event'] == 'lost':
+                    resolve(data)
+            Tools.setTimeout(reject, 2.5, "unfriend timeout (2.5s)")
+            self.socket.on('friend', check)
+            self.socket.on('game_response', failCheck)
+            await self.socket.emit('friend', { 'event': 'unfriend', 'name': id })
+            while not unfriended.done():
+                await asyncio.sleep(Constants.WAIT)
+            return unfriended.result()
+        return await Tools.tryExcept(unfriendFn)
 
-    async def upgrade(self, itemPos: int, scrollPos: int, offerPos: int = None):
-        pass
+    async def upgrade(self, itemPos: int, scrollPos: int, offeringPos: int = None):
+        async def upgradeFn():
+            nonlocal self
+            nonlocal itemPos
+            nonlocal scrollPos
+            nonlocal offeringPos
+            if not self.ready:
+                raise Exception("We aren't ready yet [upgrade].")
+            if Tools.hasKey(self.G['maps'][self.map], 'mount'):
+                raise Exception("We can't upgrade things in the bank.")
+            
+            itemInfo = self.items[itemPos]
+            scrollInfo = self.items[scrollPos]
+            if itemInfo == None:
+                raise Exception(f"There is no item in inventory slot {itemPos}.")
+            if scrollInfo == None:
+                raise Exception(f"There is no scroll in inventory slot {scrollPos}.")
+            if not Tools.hasKey(itemInfo, 'upgrade'):
+                raise Exception("This item is not upgradable.")
+            offeringInfo = self.items[offeringPos] if offeringPos != None else None
+            if offeringPos != None and offeringInfo == None:
+                raise Exception(f"There is no item in inventory slot {offeringPos} (offering).")
+            upgradeComplete = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal upgradeComplete
+                if not upgradeComplete.done():
+                    self.socket.off('game_response', gameResponseCheck)
+                    self.socket.off('player', playerCheck)
+                    upgradeComplete.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal upgradeComplete
+                if not upgradeComplete.done():
+                    self.socket.off('game_response', gameResponseCheck)
+                    self.socket.off('player', playerCheck)
+                    upgradeComplete.set_result(value)
+            def playerCheck(data):
+                if not Tools.hasKey(data, 'hitchhikers'):
+                    return
+                for event, datum in data['hitchhikers'].items():
+                    if event == 'game_response' and datum['response'] == 'upgrade_fail' and datum['num'] == itemPos:
+                        resolve(False)
+                        return
+                    elif event == 'game_response' and datum['response'] == 'upgrade_success' and datum['num'] == itemPos:
+                        resolve(True)
+                        return
+            def gameResponseCheck(data):
+                nonlocal scrollInfo
+                if isinstance(data, dict):
+                    if data['place'] == 'upgrade':
+                        if data['response'] == 'bank_restriction':
+                            reject("You can't upgrade items in the bank.")
+                        elif data['response'] == 'item_locked':
+                            reject("You can't upgrade locked items.")
+                        elif data['response'] == 'get_closer':
+                            reject("We are too far away to upgrade items.")
+                elif isinstance(data, str):
+                    if data == 'bank_restrictions':
+                        reject("We can't upgrade things in the bank.")
+                    elif data == 'upgrade_in_progress':
+                        reject("We are already upgrading something.")
+                    elif data == 'upgrade_incompatible_scroll':
+                        reject(f"The scroll we are trying to use ({scrollInfo['name']}) isn't a high enough grade to upgrade this item.")
+                    elif data == 'upgrade_fail':
+                        resolve(False)
+                    elif data == 'upgrade_success':
+                        resolve(True)
+            Tools.setTimeout(reject, 60, "upgrade timeout (60s)")
+            self.socket.on('game_response', gameResponseCheck)
+            self.socket.on('player', playerCheck)
+            await self.socket.emit('upgrade', { 'clevel': self.items[itemPos]['level'], 'item_num': itemPos, 'offering_num': offeringPos, 'scroll_num': scrollPos })
+            while not upgradeComplete.done():
+                await asyncio.sleep(Constants.WAIT)
+            return upgradeComplete.result()
+        return await Tools.tryExcept(upgradeFn)
 
     async def useHPPot(self, itemPos: int):
-        pass
+        async def healFn():
+            nonlocal self
+            nonlocal itemPos
+            if not self.ready:
+                raise Exception("We aren't ready yet [useHPPot].")
+            item = self.items['itemPos']
+            if item == None:
+                raise Exception(f"There is no item in inventory slot {itemPos}.")
+            if self.G['items'][item['name']]['type'] != 'pot':
+                raise Exception(f"The item provided ({item['name']} [{itemPos}]) is not a potion.")
+            if self.G['items'][item['name']]['gives'][0][0] != 'hp':
+                raise Exception(f"The item provided ({item['name']} [{itemPos}]) is not an HP potion.")
+            if self.G['items'][item['name']]['gives'][0][1] < 0:
+                raise Exception(f"The item provided ({item['name']} [{itemPos}]) is not an HP potion.")
+            healReceived = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal healReceived
+                if not healReceived.done():
+                    self.socket.off('eval', healCheck)
+                    self.socket.off('disappearing_text', failCheck)
+                    healReceived.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal healReceived
+                if not healReceived.done():
+                    self.socket.off('eval', healCheck)
+                    self.socket.off('disappearing_text', failCheck)
+                    healReceived.set_result(value)
+            def healCheck(data):
+                if Tools.hasKey(data, 'code') and 'pot_timeout' in data['code']:
+                    resolve()
+            def failCheck(data):
+                if data['id'] == self.id and data['message'] == 'NOT READY':
+                    reject('useHPPot is on cooldown')
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"useHPPot timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('eval', healCheck)
+            self.socket.on('disappearing_text', failCheck)
+            await self.socket.emit('equip', { 'consume': True, 'num': itemPos })
+            while not healReceived.done():
+                await asyncio.sleep(Constants.WAIT)
+            return healReceived.result()
+        return await Tools.tryExcept(healFn)
 
     async def useMPPot(self, itemPos: int):
-        pass
+        async def healFn():
+            nonlocal self
+            nonlocal itemPos
+            if not self.ready:
+                raise Exception("We aren't ready yet [useHPPot].")
+            item = self.items['itemPos']
+            if item == None:
+                raise Exception(f"There is no item in inventory slot {itemPos}.")
+            if self.G['items'][item['name']]['type'] != 'pot':
+                raise Exception(f"The item provided ({item['name']} [{itemPos}]) is not a potion.")
+            if self.G['items'][item['name']]['gives'][0][0] != 'mp':
+                raise Exception(f"The item provided ({item['name']} [{itemPos}]) is not an MP potion.")
+            if self.G['items'][item['name']]['gives'][0][1] < 0:
+                raise Exception(f"The item provided ({item['name']} [{itemPos}]) is not an MP potion.")
+            healReceived = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal healReceived
+                if not healReceived.done():
+                    self.socket.off('eval', healCheck)
+                    self.socket.off('disappearing_text', failCheck)
+                    healReceived.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal healReceived
+                if not healReceived.done():
+                    self.socket.off('eval', healCheck)
+                    self.socket.off('disappearing_text', failCheck)
+                    healReceived.set_result(value)
+            def healCheck(data):
+                if Tools.hasKey(data, 'code') and 'pot_timeout' in data['code']:
+                    resolve()
+            def failCheck(data):
+                if data['id'] == self.id and data['message'] == 'NOT READY':
+                    reject('useMPPot is on cooldown')
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"useMPPot timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('eval', healCheck)
+            self.socket.on('disappearing_text', failCheck)
+            await self.socket.emit('equip', { 'consume': True, 'num': itemPos })
+            while not healReceived.done():
+                await asyncio.sleep(Constants.WAIT)
+            return healReceived.result()
+        return await Tools.tryExcept(healFn)
 
     async def warpToJail(self):
-        pass
+        async def warpFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [warpToJail].")
+            return await self.move(100_000, 100_000, disableSafetyCheck=True)
+        return await Tools.tryExcept(warpFn)
 
     async def warpToTown(self):
-        if not self.ready:
-            raise Exception("We aren't ready yet [warpToTown].")
-        startedWarp = False
-        if Tools.hasKey(self.c, 'town'):
-            startedWarp = True
         async def warpFn():
+            nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [warpToTown].")
+            startedWarp = False
+            if Tools.hasKey(self.c, 'town'):
+                startedWarp = True
             warpComplete = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 nonlocal warpComplete
@@ -2735,19 +3239,393 @@ class Character(Observer):
             while not warpComplete.done():
                 await asyncio.sleep(Constants.WAIT)
             return warpComplete.result()
-        return await Character.tryExcept(warpFn)
+        return await Tools.tryExcept(warpFn)
 
     async def withdrawGold(self, gold: int):
-        pass
+        async def goldFn():
+            nonlocal self
+            nonlocal gold
+            if not self.ready: raise Exception("We aren't ready yet [withdrawGold].")
+            if self.map != 'bank': raise Exception("We need to be in 'bank' to withdraw gold.")
+            if gold <= 0: raise Exception("We can't withdraw 0 or less gold.")
+            if gold > self.bank['gold']:
+                gold = self.bank['gold']
+                self.logger.warn(f"We are only going to withdraw {gold} gold.")
+            await self.socket.emit('bank', { 'amount': gold, 'operation': 'withdraw' })
+        return await Tools.tryExcept(goldFn)
 
     async def withdrawItem(self, bankPack: str, bankPos: int, inventoryPos: int = -1):
-        pass
+        async def itemFn():
+            nonlocal self
+            nonlocal bankPack
+            nonlocal bankPos
+            nonlocal inventoryPos
+            if not self.ready: raise Exception("We aren't ready yet [withdrawItem].")
+            for i in range(0, 20):
+                if Tools.hasKey(self.bank, 'items0'):
+                    break
+                await asyncio.sleep(250)
+            if not Tools.hasKey(self.bank, 'items0'):
+                raise Exception("We don't have bank information yet. Please try again later.")
+            
+            item = self.bank[bankPack][bankPos]
+            if item == None:
+                raise Exception(f"There is no item in bank {bankPack}[{bankPos}]")
+            
+            bankPackNum = int(bankPack[5:])
+            if ((self.map == 'bank' and (bankPackNum < 0 or bankPackNum > 7))
+                or (self.map == 'bank_b' and (bankPackNum < 8 or bankPackNum > 23))
+                or (self.map == 'bank_u' and (bankPackNum < 24 or bankPackNum > 47))):
+                raise Exception(f"We cannot access {bankPack} on {self.map}.")
+            
+            itemCount = self.countItem(item['name'])
+
+            swapped = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal self
+                nonlocal swapped
+                if not swapped.done():
+                    self.socket.off('player', checkWithdrawal)
+                    swapped.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal self
+                nonlocal swapped
+                if not swapped.done():
+                    self.socket.off('player', checkWithdrawal)
+                    swapped.set_result(value)
+            def checkWithdrawal(data):
+                nonlocal itemCount
+                newCount = self.countItem(item['name'], data['items'])
+                if ((Tools.hasKey(item, 'q') and newCount == (itemCount + item['q']))
+                    or (not Tools.hasKey(item, 'q') and newCount == (itemCount + 1))):
+                    resolve()
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"withdrawItem timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('player', checkWithdrawal)
+            await self.socket.emit('bank', { 'inv': inventoryPos, 'operation': 'swap', 'pack': bankPack, 'str': bankPos })
+            while not swapped.done():
+                await asyncio.sleep(Constants.WAIT)
+            return swapped.result()
+        return await Tools.tryExcept(itemFn)
 
     async def zapperZap(self, id: str):
-        pass
+        async def zapFn():
+            nonlocal self
+            nonlocal id
+            if not self.ready: raise Exception("We aren't ready yet [zapperZap].")
+            zapped = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal self
+                nonlocal zapped
+                if not zapped.done():
+                    self.socket.off('action', successCheck)
+                    self.socket.off('game_response', failCheck)
+                    zapped.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal self
+                nonlocal zapped
+                if not zapped.done():
+                    self.socket.off('action', successCheck)
+                    self.socket.off('game_response', failCheck)
+                    zapped.set_result(value)
+            def successCheck(data):
+                if data['attacker'] != self.id: return
+                if data['target'] != id: return
+                if data['source'] != 'zapperzap': return
+                resolve(data['pid'])
+            def failCheck(data):
+                if isinstance(data, str):
+                    if data == 'skill_cant_slot':
+                        reject("We don't have a zapper equipped")
+                elif isinstance(data, dict):
+                    if data['response'] == 'cooldown' and data['skill'] == 'zapperzap':
+                        reject(f"zapperzap is on cooldown ({data['ms']}ms remaining)")
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"zapperZap timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('action', successCheck)
+            self.socket.on('game_response', failCheck)
+            await self.socket.emit('skill', { 'id': id, 'name': 'zapperzap' })
+            while not zapped.done():
+                await asyncio.sleep(Constants.WAIT)
+            self.nextSkill['zapperzap'] = datetime.now() + timedelta(milliseconds=self.G['skills']['zapperzap']['cooldown'])
+            return zapped.result()
+        return await Tools.tryExcept(zapFn)
 
     def couldDieToProjectiles(self):
-        pass
+        incomingProjectileDamage = 0
+        for projectile in self.projectiles.values():
+            if not Tools.hasKey(projectile, 'damage'): continue
+            if projectile['target'] != self.id: continue
 
-    def countItem(self, item: str, inventory: dict = None, filters: dict = {}):
-        pass
+            attacker = None
+            if attacker == None and self.id == projectile['attacker']: attacker = self
+            if attacker == None: attacker = self.players.get(projectile['attacker'])
+            if attacker == None: attacker = self.entities.get(projectile['attacker'])
+            if attacker == None:
+                incomingProjectileDamage += projectile['damage'] * 2.2
+                if incomingProjectileDamage >= self.hp: return True
+                continue
+
+            if attacker['damage_type'] == 'physical' and self.evasion >= 100: continue
+            if attacker['damage_type'] == 'magical' and self.reflection >= 100: continue
+
+            maximumDamage = attacker.calculateDamageRange(self, projectile['type'])[1]
+
+            incomingProjectileDamage += maximumDamage
+            if (incomingProjectileDamage >= self.hp): return True
+        return False
+
+    def countItem(self, item: str, inventory: dict = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None):
+        kwargs = { 'level': level, 'levelGreaterThan': levelGreaterThan, 'levelLessThan': levelLessThan, 'locked': locked, 'pvpMarked': pvpMarked, 'quantityGreaterThan': quantityGreaterThan, 'special': special, 'statType': statType }
+        count = 0
+        for index in self.locateItems(item, inventory, **kwargs):
+            curr = inventory[index]
+            count += curr['q'] if Tools.hasKey(curr, 'q') else 1
+        return count
+
+    def getCooldown(self, skill: str):
+        gSkill = self.G['skills'][skill]
+        share = gSkill.get('share', None)
+        nextSkill = self.nextSkill.get(share) if share != None else self.nextSkill.get(skill)
+        if nextSkill == None:
+            return 0
+
+        cooldown = (nextSkill.get(skill, datetime.now()) - datetime.now()).total_seconds()
+        if cooldown <= 0: return 0
+        return cooldown
+    
+    def getNearestAttackablePlayer(self):
+        if not self.isPVP(): return None
+
+        closest = None
+        closestD = sys.maxsize
+        for player in self.players.values():
+            if Tools.hasKey(player.s, 'invincible'): continue
+            if hasattr(player, 'npc'): continue
+            d = Tools.distance(self, player)
+            if d < closestD:
+                closest = player
+                closestD = d
+        if closest != None:
+            return { 'distance': closestD, 'player': closest }
+        return None
+    
+    def hasPvPMarkedItem(self, inv = None):
+        if inv == None:
+            inv = self.items
+        for i in range(0, len(inv)):
+            item = inv[i]
+            if item != None:
+                if Tools.hasKey(item, 'v'):
+                    return True
+        return False
+
+    def hasItem(self, iN, inv = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None):
+        kwargs = { 'level': level, 'levelGreaterThan': levelGreaterThan, 'levelLessThan': levelLessThan, 'locked': locked, 'pvpMarked': pvpMarked, 'quantityGreaterThan': quantityGreaterThan, 'special': special, 'statType': statType }
+        return len(self.locateItems(iN, inv, **kwargs)) > 0
+    
+    def isCompounding(self):
+        return Tools.hasKey(self.q, 'compound')
+    
+    def isEquipped(self, itemName):
+        for slot in self.slots:
+            if self.slots[slot] == None: continue
+            if Tools.hasKey(self.slots[slot], 'price'): continue
+            if self.slots[slot]['name'] == itemName: return True
+        return False
+    
+    def isExchanging(self):
+        return Tools.hasKey(self.q, 'exchange')
+    
+    def isListedForPurchase(self, itemName):
+        for slot in self.slots:
+            if self.slots[slot] == None: continue
+            if not Tools.hasKey(self.slots[slot], 'price'): continue
+            if not Tools.hasKey(self.slots[slot], 'b'): continue
+            if self.slots[slot]['name'] == itemName: return True
+        return False
+    
+    def isListedForSale(self, itemName):
+        for slot in self.slots:
+            if self.slots[slot] == None: continue
+            if not Tools.hasKey(self.slots[slot], 'price'): continue
+            if Tools.hasKey(self.slots[slot], 'b'): continue
+            if self.slots[slot]['name'] == itemName: return True
+        return False
+
+    def isOnCooldown(self, skill):
+        return self.getCooldown(skill) != 0
+    
+    def isUpgrading(self):
+        return Tools.hasKey(self.q, 'upgrade')
+    
+    def isPVP(self):
+        if Tools.hasKey(self.G['maps'][self.map], 'pvp'): return True
+        if Tools.hasKey(self.G['maps'][self.map], 'safe'): return False
+        return self.server['pvp']
+
+    def locateItem(self, iN, inv = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None, returnHighestLevel = False, returnLowestLevel = False ):
+        if inv == None:
+            inv = self.items
+        
+        kwargs = { 'level': level, 'levelGreaterThan': levelGreaterThan, 'levelLessThan': levelLessThan, 'locked': locked, 'pvpMarked': pvpMarked, 'quantityGreaterThan': quantityGreaterThan, 'special': special, 'statType': statType }
+        
+        located = self.locateItems(iN, inv, **kwargs)
+
+        if len(located) == 0: return None
+
+        if returnHighestLevel:
+            if returnLowestLevel:
+                raise Exception("Set either return HighestLevel or returnLowestLevel, not both.")
+            highestLevel = -1
+            highestLevelIndex = None
+            for i in range(0, len(located)):
+                j = located[i]
+                item = inv[j]
+                if item['level'] > highestLevel:
+                    highestLevel = item['level']
+                    highestLevelIndex = i
+            return located[highestLevelIndex]
+        
+        if returnLowestLevel:
+            lowestLevel = float('inf')
+            lowestLevelIndex = None
+            for i in range(0, len(located)):
+                j = located[i]
+                item = inv[j]
+                if item['level'] < lowestLevel:
+                    lowestLevel = item['level']
+                    lowestLevelIndex = i
+            return located[lowestLevelIndex]
+        
+        return located[0]
+    
+    def locateItems(self, iN, inv = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None):
+        if inv == None:
+            inv = self.items
+        
+        if quantityGreaterThan == 0:
+            quantityGreaterThan = None
+        
+        found = []
+        for i in range(0, len(inv)):
+            item = inv[i]
+            if item == None: continue
+            if item['name'] != iN: continue
+
+            if level != None:
+                if item['level'] != level:
+                    continue
+            if levelGreaterThan != None:
+                if item['level'] <= levelGreaterThan:
+                    continue
+            if levelLessThan != None:
+                if item['level'] >= levelLessThan:
+                    continue
+            if locked != None:
+                if locked and not Tools.hasKey(item, 'l'):
+                    continue
+                if not locked and Tools.hasKey(item, 'l'):
+                    continue
+            if pvpMarked != None:
+                if pvpMarked and not Tools.hasKey(item, 'v'):
+                    continue
+                if not pvpMarked and Tools.hasKey(item, 'v'):
+                    continue
+            if quantityGreaterThan != None:
+                if not Tools.hasKey(item, 'q'):
+                    continue
+                if item['q'] <= quantityGreaterThan:
+                    continue
+            if special != None:
+                if special and not Tools.hasKey(item, 'p'):
+                    continue
+                if not special and Tools.hasKey(item, 'p'):
+                    continue
+            if statType != None:
+                if item['stat_type'] != statType:
+                    continue
+            
+            found.append(i)
+        
+        return found
+    
+    def locateItemsByLevel(self, inventory = None, *, excludeLockedItems = False, excludeSpecialItems = False, minAmount = None):
+        def redFn(items, item):
+            if item:
+                print(item)
+                print(inventory.index(item))
+                if not Tools.hasKey(item, 'level'): return items
+                name = item['name']
+                level = item['level']
+                if excludeSpecialItems and Tools.hasKey(item, 'p'): return items
+                if excludeLockedItems and Tools.hasKey(item, 'l'): return items
+                if not Tools.hasKey(items, name):
+                    items[name] = {}
+                if not Tools.hasKey(items[name], level):
+                    items[name][level] = []
+                items[name][level].append(inventory.index(item))
+            return items
+        itemsByLevel = reduce(redFn, inventory, {})
+
+        if minAmount != None:
+            for itemName in itemsByLevel:
+                for itemLevel in itemsByLevel[itemName]:
+                    if len(itemsByLevel[itemName][itemLevel]) < minAmount: del itemsByLevel[itemName][itemLevel]
+
+                if len(itemsByLevel[itemName]) == 0: del itemsByLevel[itemName]
+        
+        return itemsByLevel
+
+    def locateMonster(self, mType):
+        locations = []
+
+        if mType == 'goldenbat': mType = 'bat'
+        elif mType == 'snowman': mType = 'arcticbee'
+
+        for mapName in self.G['maps']:
+            map = self.G['maps'][mapName]
+            if Tools.hasKey(map, 'ignore'): continue
+            if Tools.hasKey(map, 'instance') or not Tools.hasKey(map, 'monsters') or len(map['monsters']) == 0: continue
+
+            for monsterSpawn in map['monsters']:
+                if monsterSpawn['type'] != mType: continue
+                if Tools.hasKey(monsterSpawn, 'boundary'):
+                    locations.append({'map': mapName, 'x': (monsterSpawn['boundary'][0] + monsterSpawn['boundary'][2]) / 2, 'y': (monsterSpawn['boundary'][1] + monsterSpawn['boundary'][3]) / 2 })
+                elif Tools.hasKey(monsterSpawn, 'boundaries'):
+                    for boundary in monsterSpawn['boundaries']:
+                        locations.append({'map': boundary[0], 'x': (boundary[1] + boundary[3]) / 2, 'y': (boundary[2] + boundary[4]) / 2})
+        
+        return locations
+    
+    def locateNPC(self, npcID):
+        locations = []
+
+        for mapName in self.G['maps']:
+            map = self.G['maps'][mapName]
+            if Tools.hasKey(map, 'ignore'): continue
+            if Tools.hasKey(map, 'instance') or not Tools.hasKey(map, 'npcs') or len(map['npcs']) == 0: continue
+
+            for npc in map['npcs']:
+                if npc['id'] != npcID: continue
+
+                if Tools.hasKey(npc, 'position'):
+                    locations.append({ 'map': mapName, 'x': npc['position'][0], 'y': npc['position'][1] })
+                elif Tools.hasKey(npc, 'positions'):
+                    for position in npc['positions']:
+                        locations.append({ 'map': mapName, 'x': position[0], 'y': position[1] })
+        
+        return locations
+    
+    def locateCraftNPC(self, itemName):
+        try:
+            gCraft = self.G['craft'][itemName]
+            if gCraft != None:
+                npcToLocate = gCraft['quest'] if Tools.hasKey(gCraft, 'quest') else 'craftsman'
+                for mapName in self.G['maps']:
+                    gMap = self.G['maps'][mapName]
+                    if Tools.hasKey(gMap, 'ignore'): continue
+
+                    for npc in gMap['npcs']:
+                        if npc['id'] == npcToLocate:
+                            return { 'map': mapName, 'x': npc['position'][0], 'y': npc['position'][1] }
+        except Exception as e:
+            self.logger.exception(f"{itemName} is not craftable.")

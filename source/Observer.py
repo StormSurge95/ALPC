@@ -11,8 +11,8 @@ import math
 class Observer(object):
     pingsPerServer : dict = {}
 
-    def __init__(self, serverData: dict, g: dict):
-        self.socket = psSocketIO.AsyncClient(reconnection=False, logger=False)
+    def __init__(self, serverData: dict, g: dict, log: bool = False):
+        self.socket = psSocketIO.AsyncClient(reconnection=False, logger=log)
         self.serverData = serverData
         self.G = g
         self.lastAllEntities = 0
@@ -314,14 +314,25 @@ class Observer(object):
     async def sendPing(self, log: bool=True):
         pingID = str(self.pingNum)
         self.pingNum += 1
-        self.pingMap[pingID] = {'log': log, 'time': datetime.datetime.now() }
-        await self.socket.emit('ping_trig', { 'id': pingID })
-        return pingID
-
-    @staticmethod
-    async def tryExcept(func, *args, **kwargs):
-        try:
-            return await func(*args, **kwargs)
-        except Exception as e:
-            print('Error:', e)
-            return
+        self.pingMap[pingID] = { 'log': log, 'time': datetime.datetime.now() }
+        async def pingFn():
+            pinged = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal pinged
+                if not pinged.done():
+                    self.socket.off('ping_ack', successCheck)
+                    pinged.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal pinged
+                if not pinged.done():
+                    self.socket.off('ping_ack', successCheck)
+                    pinged.set_result(value)
+            def successCheck(data):
+                resolve(data['id'])
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"sendPing timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('ping_ack', successCheck)
+            await self.socket.emit('ping_trig', { 'id': pingID })
+            while not pinged.done():
+                await asyncio.sleep(Constants.WAIT)
+            return pinged.result()
+        return await Tools.tryExcept(pingFn)

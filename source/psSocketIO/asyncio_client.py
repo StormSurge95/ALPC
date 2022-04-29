@@ -8,7 +8,7 @@ from . import client
 from . import exceptions
 from . import packet
 
-default_logger = logging.getLogger('socketio.client')
+default_logger = logging.getLogger('psSocketIO.asyncClient')
 
 
 class AsyncClient(client.Client):
@@ -309,7 +309,9 @@ class AsyncClient(client.Client):
         for n in self.namespaces:
             await self._send_packet(self.packet_class(packet.DISCONNECT,
                                     namespace=n))
+        await self._send_packet(self.packet_class(packet.DISCONNECT))
         await self.eio.disconnect(abort=True)
+        await self.eio.http.close()
 
     def start_background_task(self, target, *args, **kwargs):
         """Start a background task using the appropriate async model.
