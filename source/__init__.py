@@ -1,14 +1,14 @@
 import sys
 
-from .Character import Character
-from .Constants import Constants
-from .Entity import Entity
-from .Game import Game
-from .Observer import Observer
-from .Pathfinder import Pathfinder
-from .PingCompensatedCharacter import PingCompensatedCharacter
-from .Player import Player
-from .Tools import Tools
+from Character import Character
+from Constants import Constants
+from Entity import Entity
+from Game import Game
+from Observer import Observer
+from Pathfinder import Pathfinder
+from PingCompensatedCharacter import PingCompensatedCharacter
+from Player import Player
+from Tools import Tools
 
 __all__ = [ 'Character', 'Constants', 'Entity', 'Game',
             'Observer', 'Pathfinder', 'PingCompensatedCharacter',

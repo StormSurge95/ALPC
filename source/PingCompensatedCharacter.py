@@ -1,8 +1,8 @@
 from datetime import datetime
 import math
-from .Constants import Constants
-from .Character import Character
-from .Tools import Tools
+from Constants import Constants
+from Character import Character
+from Tools import Tools
 
 class PingCompensatedCharacter(Character):
     
@@ -12,7 +12,7 @@ class PingCompensatedCharacter(Character):
     async def connect(self):
         try:
             await super().connect()
-            self.pingLoop()
+            await self.pingLoop()
         except Exception as e:
             await self.disconnect()
             raise e
@@ -37,8 +37,7 @@ class PingCompensatedCharacter(Character):
                 self.x = self.x + math.cos(angle) * distanceTravelled
                 self.y = self.y + math.sin(angle) * distanceTravelled
         
-        for cond in self.s:
-            condition = self.s[cond]
+        for condition in self.s:
             if Tools.hasKey(self.s[condition], 'ms'):
                 self.s[condition]['ms'] -= pingCompensation * 1000
                 if self.s[condition]['ms'] <= 0:
@@ -55,10 +54,9 @@ class PingCompensatedCharacter(Character):
 
         pingCompensation = self.ping
 
-        for mon in data['monsters']:
-            monster = data['monsters'][mon]
+        for monster in data['monsters']:
             entity = self.entities.get(monster['id'])
-            if entity == None or not entity.moving: continue
+            if entity == None or not hasattr(entity, 'moving'): continue
             distanceTravelled = entity.speed * pingCompensation
             angle = math.atan2(entity.going_y - entity.y, entity.going_x - entity.x)
             distanceToGoal = Tools.distance({ 'x': entity.x, 'y': entity.y }, { 'x': entity.going_x, 'y': entity.going_y })
@@ -76,10 +74,9 @@ class PingCompensatedCharacter(Character):
                     if entity.s[condition]['ms'] <= 0:
                         del entity.s[condition]
         
-        for p in data['players']:
-            player = data['players'][p]
+        for player in data['players']:
             entity = self.players.get(player['id'])
-            if entity == None or not entity.moving: continue
+            if entity == None or not hasattr(entity, 'moving'): continue
             distanceTravelled = entity.speed * pingCompensation
             angle = math.atan2(entity.going_y - entity.y, entity.going_x - entity.x)
             distanceToGoal = Tools.distance({ 'x': entity.x, 'y': entity.y }, { 'x': entity.going_x, 'y': entity.going_y })
@@ -114,8 +111,8 @@ class PingCompensatedCharacter(Character):
             else:
                 self.q['compound'] = data['q']['compound']
     
-    async def _pingLoop(self):
-        if not self.socket or self.socket.disconnected:
+    async def pingLoop(self):
+        if not self.socket or not self.socket.connected:
             self.timeouts['pingLoop'] = Tools.setTimeout(self.pingLoop, 1)
             return
         

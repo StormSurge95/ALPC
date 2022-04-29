@@ -6,6 +6,7 @@ import logging.config
 import sys
 from Observer import Observer
 from Character import Character
+from PingCompensatedCharacter import PingCompensatedCharacter
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(sys.stdout)
@@ -275,7 +276,7 @@ class Game:
         characterID = Game.characters[cName]['id']
 
         player = None
-        player = Character(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
+        player = PingCompensatedCharacter(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
         await player.connect()
         return player
         #ctype = self.characters[cName].type
