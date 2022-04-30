@@ -1,11 +1,11 @@
 from functools import reduce
 import logging
-from Observer import Observer
-from Player import Player
-from Entity import Entity
-from Tools import Tools
-from Constants import Constants
-from Pathfinder import Pathfinder
+from .Observer import Observer
+from .Player import Player
+from .Entity import Entity
+from .Tools import Tools
+from .Constants import Constants
+from .Pathfinder import Pathfinder
 from datetime import datetime, timedelta
 import asyncio
 import re

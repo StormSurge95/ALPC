@@ -4,9 +4,9 @@ import re
 import logging
 import logging.config
 import sys
-from Observer import Observer
-from Character import Character
-from PingCompensatedCharacter import PingCompensatedCharacter
+from .Observer import Observer
+from .Character import Character
+from .PingCompensatedCharacter import PingCompensatedCharacter
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler(sys.stdout)

@@ -1,11 +1,10 @@
 import asyncio
 import psSocketIO
 import datetime
-from Entity import Entity
-from Player import Player
-#from database.Database import Database
-from Tools import Tools
-from Constants import Constants
+from .Entity import Entity
+from .Player import Player
+from .Tools import Tools
+from .Constants import Constants
 import math
 
 class Observer(object):

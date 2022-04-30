@@ -1,4 +1,4 @@
-from Tools import Tools
+from .Tools import Tools
 import logging
 import logging.config
 import sys

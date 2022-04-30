@@ -2,10 +2,10 @@ from datetime import datetime
 import logging
 import math
 import sys
-from Delaunator import Delaunator
+from .Delaunator import Delaunator
 import igraph
-from Constants import Constants
-from Tools import Tools
+from .Constants import Constants
+from .Tools import Tools
 
 UNKNOWN = 1
 UNWALKABLE = 2

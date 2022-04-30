@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
-from Game import Game
-from Pathfinder import Pathfinder
+import ALPC as AL
 #from database.Database import Database
 #from Tools import Tools
 import asyncio
@@ -18,20 +17,18 @@ logging.root.setLevel(logging.DEBUG)
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        #pprint(datetime.now())
-        #pprint(datetime.now() + timedelta(milliseconds=1000))
-        await Game.loginJSONFile(session, '..\credentials.json')
-        await Game.getGData(session, True, True)
-        #await Pathfinder.prepare(Game.G)
+        await AL.Game.loginJSONFile(session, '..\credentials.json')
+        await AL.Game.getGData(session, True, True)
+        await AL.Pathfinder.prepare(AL.Game.G)
         #await Game.startObserver(session, 'US', 'III')
-        warrior = await Game.startCharacter(session, 'WarriorSurge', 'US', 'I', False)
+        warrior = await AL.Game.startCharacter(session, 'WarriorSurge', 'US', 'I', False)
         #ranger = await Game.startCharacter(session, 'RangerSurge', 'US', 'III')
         #priest = await Game.startCharacter(session, 'PriestSurge', 'US', 'III')
         await asyncio.sleep(10)
-        #await warrior.smartMove('bank')
-        #await asyncio.sleep(5)
+        await warrior.smartMove('bank')
+        await asyncio.sleep(5)
         pprint('Test Running...')
-        #pprint(warrior.bank)
+        pprint(warrior.bank)
         #await ranger.smartMove('main')
         #await priest.smartMove('main')
         await asyncio.sleep(10)

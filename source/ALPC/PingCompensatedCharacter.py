@@ -1,8 +1,8 @@
 from datetime import datetime
 import math
-from Constants import Constants
-from Character import Character
-from Tools import Tools
+from .Constants import Constants
+from .Character import Character
+from .Tools import Tools
 
 class PingCompensatedCharacter(Character):
     
