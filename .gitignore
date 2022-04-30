@@ -15,8 +15,13 @@
 
 # Mono auto generated files
 mono_crash.*
+
+# dev files
 credentials.json
 G_*.json
+pyproject.toml
+MANIFEST.in
+setup.cfg
 
 # Build results
 [Dd]ebug/
