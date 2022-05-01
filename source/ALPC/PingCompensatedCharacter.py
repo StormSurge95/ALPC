@@ -37,13 +37,13 @@ class PingCompensatedCharacter(Character):
                 self.x = self.x + math.cos(angle) * distanceTravelled
                 self.y = self.y + math.sin(angle) * distanceTravelled
         
-        for condition in self.s:
+        for condition in list(self.s):
             if Tools.hasKey(self.s[condition], 'ms'):
                 self.s[condition]['ms'] -= pingCompensation * 1000
                 if self.s[condition]['ms'] <= 0:
                     del self.s[condition]
         
-        for process in self.q:
+        for process in list(self.q):
             if Tools.hasKey(self.q[process], 'ms'):
                 self.q[process]['ms'] -= pingCompensation * 1000
                 if self.q[process]['ms'] <= 0:
@@ -57,6 +57,7 @@ class PingCompensatedCharacter(Character):
         for monster in data['monsters']:
             entity = self.entities.get(monster['id'])
             if entity == None or not hasattr(entity, 'moving'): continue
+            if not hasattr(entity, 'going_x') or not hasattr(entity, 'going_y'): continue
             distanceTravelled = entity.speed * pingCompensation
             angle = math.atan2(entity.going_y - entity.y, entity.going_x - entity.x)
             distanceToGoal = Tools.distance({ 'x': entity.x, 'y': entity.y }, { 'x': entity.going_x, 'y': entity.going_y })
@@ -68,7 +69,7 @@ class PingCompensatedCharacter(Character):
                 entity.x = entity.x + math.cos(angle) * distanceTravelled
                 entity.y = entity.y + math.sin(angle) * distanceTravelled
             
-            for condition in entity.s:
+            for condition in list(entity.s):
                 if Tools.hasKey(entity.s[condition], 'ms'):
                     entity.s[condition]['ms'] -= pingCompensation * 1000
                     if entity.s[condition]['ms'] <= 0:
@@ -88,7 +89,7 @@ class PingCompensatedCharacter(Character):
                 entity.x = entity.x + math.cos(angle) * distanceTravelled
                 entity.y = entity.y + math.sin(angle) * distanceTravelled
             
-            for condition in entity.s:
+            for condition in list(entity.s):
                 if Tools.hasKey(entity.s[condition], 'ms'):
                     entity.s[condition]['ms'] -= pingCompensation * 1000
                     if entity.s[condition]['ms'] <= 0:

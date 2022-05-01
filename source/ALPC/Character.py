@@ -342,7 +342,7 @@ class Character(Observer):
         return await Tools.tryExcept(connectedFn)
 
     async def disconnect(self) -> None:
-        self.logger.info('Disconnecting!')
+        self.logger.debug('Disconnecting!')
 
         if self.socket:
             await self.socket.disconnect()
@@ -1941,7 +1941,7 @@ class Character(Observer):
                         Tools.clearTimeout(timeout)
                         resolve({ 'map': self.map, 'x': data['x'], 'y': data['y'] })
                     return
-                if not data['moving'] or data['going_x'] != to['x'] or data['going_y'] != to['y']:
+                if not data.get('moving') or data.get('going_x') != to['x'] or data.get('going_y') != to['y']:
                     try:
                         newData = await self.requestPlayerData()
                         if newData != None and (not newData['moving'] or newData['going_x'] != to['x'] or newData['going_y'] != to['y']):
@@ -2694,16 +2694,16 @@ class Character(Observer):
                         continue
                 
                 # Town Check
-                j = i + 1
-                while j < len(path):
-                    futureMove = path[j]
-                    if currentMove['map'] != futureMove['map']: break
-                    if futureMove['type'] == 'town':
-                        await self.warpToTown()
-                        i = j - 1
-                        break
-                    j += 1
-                
+                # j = i + 1
+                # while j < len(path):
+                #     futureMove = path[j]
+                #     if currentMove['map'] != futureMove['map']: break
+                #     if futureMove['type'] == 'town':
+                #         await self.warpToTown()
+                #         i = j - 1
+                #         break
+                #     j += 1
+
                 try:
                     if currentMove['type'] == 'enter':
                         pass

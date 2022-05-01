@@ -117,9 +117,6 @@ class Client(object):
             engineio_options['logger'] = engineio_logger
         if serializer == 'default':
             self.packet_class = packet.Packet
-        elif serializer == 'msgpack':
-            from . import msgpack_packet
-            self.packet_class = msgpack_packet.MsgPackPacket
         else:
             self.packet_class = serializer
         if json is not None:
@@ -217,9 +214,9 @@ class Client(object):
         namespace = namespace or '/'
 
         if handler in self.handlers[namespace][event]:
-            self.handlers[namespace][event].pop(self.handlers[namespace][event].index(handler))
+            self.handlers[namespace][event].remove(handler)
             if len(self.handlers[namespace][event]) == 0:
-                self.handlers[namespace].pop(event)
+                del self.handlers[namespace][event]
 
     def event(self, *args, **kwargs):
         """Decorator to register an event handler.

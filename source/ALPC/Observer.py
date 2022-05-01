@@ -1,5 +1,5 @@
 import asyncio
-import psSocketIO
+from . import psSocketIO
 import datetime
 from .Entity import Entity
 from .Player import Player

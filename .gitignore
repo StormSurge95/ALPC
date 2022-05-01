@@ -40,7 +40,7 @@ bld/
 [Ll]og/
 [Ll]ogs/
 [Dd]ist/
-adventure_land_python_client.egg-info/
+ALPC.egg-info/
 
 # Visual Studio 2015/2017 cache/options directory
 .vs/

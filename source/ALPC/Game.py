@@ -1,3 +1,4 @@
+from pprint import pprint
 import aiohttp
 import ujson
 import re
@@ -121,7 +122,7 @@ class Game:
         #if bool(mongo) and (not Database.connection):
             #await Database.connect(mongo)
         if not Game.loggedIn:
-            logger.info('Logging in...')
+            logger.debug('Logging in...')
             params = {}
             params['method'] = 'signup_or_login'
             params['arguments'] = ujson.encode({'email': email, 'only_login': True, 'password': password}, ensure_ascii=False, encode_html_chars=True, escape_forward_slashes=False)
@@ -134,7 +135,7 @@ class Game:
                         break
                 if loginResult and loginResult['message'] == 'Logged In!':
                     Game.loggedIn = True
-                    logger.info('Logged in!')
+                    logger.debug('Logged in!')
                 elif loginResult and loginResult.get('message'):
                     logger.error(str(loginResult['message']))
                     raise Exception(loginResult['message'])
@@ -328,7 +329,7 @@ class Game:
     @staticmethod
     async def startObserver(session: aiohttp.ClientSession, region: str, id: str):
         if not Game.loggedIn:
-            Game.logger.error('You must login first.')
+            logger.error('You must login first.')
             raise Exception()
         if not bool(Game.characters):
             await Game.updateServersAndCharacters(session)
@@ -360,4 +361,25 @@ class Game:
                 return True
             else:
                 logger.error(response)
+                return False
+
+    @staticmethod
+    async def disconnectCharacter(session: aiohttp.ClientSession, charName: str):
+        if not Game.loggedIn:
+            logger.error('You must login first.')
+            return
+        params = {}
+        params['method'] = 'disconnect_character'
+        params['arguments'] = ujson.encode({'name': charName}, ensure_ascii=False, encode_html_chars=True, escape_forward_slashes=False)
+        async with session.post('http://adventure.land/api/disconnect_character', data=params) as response:
+            if response.status == 200:
+                result = ujson.loads(await response.text())
+                data = result[0]
+                if data['message'] == 'Sent the disconnect signal to the server':
+                    return True
+                else:
+                    print(data)
+                    return False
+            else:
+                pprint(response)
                 return False
