@@ -93,8 +93,4 @@ Disconnecting...
 
 ## Final Notes
 * AS STATED, THIS PACKAGE IS STILL A WORK IN PROGRESS. If you have ANY issues at all or any suggestions or come accross any bugs, feel free to either submit them to the issues tab or submit your info to the existing issue if your bug is already there.
-<<<<<<< HEAD
 * Currently, there is no full support for the individual classes within the game; there is only support for basic attacks, movement, and item usage. My current focus is somewhat split between fixing the existing issues and completing the missing pieces (along with school and the fact that I work 40+ hours a week...so please have patience).
-=======
-* Currently, there is no full support for the individual classes within the game; there is only support for basic attacks, movement, and item usage. My current focus is somewhat split between fixing the existing issues and completing the missing pieces (along with school and the fact that I work 40+ hours a week...so please have patience).
->>>>>>> f2c5275bd8cb993590afe68dedaf42c714de8493
