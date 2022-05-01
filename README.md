@@ -25,7 +25,7 @@ The PyPI page can be found [here]. In order to install, simply install the packa
   
 </details>
 
-* <small>*Note: I have had personal trouble with using py on windows and the entirety of this package was developed using an installation of `python3` from the windows store; therefore, I cannot guarantee that it will work with use of the `py` command.*</small>
+* <small>*Note: This package was developed with Python 3.10.4; therefore, I cannot guarantee that it will work with anything below that. In fact, due to current bugs, I cannot even guarantee that it will work perfectly **with** that.*</small>
 
 ## Usage
 * First: be sure to install the package from PyPI using pip.
@@ -41,31 +41,56 @@ The PyPI page can be found [here]. In order to install, simply install the packa
 import aiohttp
 import asyncio
 import logging
+import sys
 import ALPC as AL
 
 logging.root.setLevel(logging.INFO)
 
 async def main():
     async with aiohttp.ClientSession() as session:
-        await AL.Game.loginJSONFile(session, '.\credentials.json')
+        print('Logging in...')
+        await AL.Game.loginJSONFile(session, '..\credentials.json')
+        print('Successfully logged in!')
+        print('Getting G Data...')
         await AL.Game.getGData(session, True, True)
+        print('Obtained G Data!')
+        print('Preparing pathfinder...')
         await AL.Pathfinder.prepare(AL.Game.G)
-        char = await AL.Game.startCharacter(session, 'YourCharacterName', 'US', 'I')
-        print('Moving to main)
+        print('Pathfinder prepared!')
+        print('Starting character...')
+        char = await AL.Game.startCharacter(session, 'WarriorSurge', 'US', 'I')
+        print('Moving to main...')
         await char.smartMove('main')
-        print('Moving to forest')
+        print('Moving to halloween...')
         await char.smartMove('halloween')
-        print('Moving to desertland')
+        print('Moving to desertland...')
         await char.smartMove('desertland')
-        print('Returning to main')
+        print('Returning to main...')
         await char.smartMove('main')
         print('Disconnecting...')
         await char.disconnect()
 
-asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy()) # if you're running on windows, include this line
+# this part is technically only required if you're running on windows due to hinkyness involving windows OS and asyncio
+if sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 asyncio.run(main())
 ```
 * Fourth: run your python file; you should get this as a result:
 ```
-TO BE CONTINUED...
+Logging in...
+Successfully logged in!
+Getting G Data...
+Obtained G Data!
+Preparing pathfinder...
+Pathfinder prepared!
+Starting character...
+Moving to main...
+Moving to halloween...
+Moving to desertland...
+Returning to main...
+Disconnecting...
 ```
+
+## Final Notes
+* AS STATED, THIS PACKAGE IS STILL A WORK IN PROGRESS. If you have ANY issues at all or any suggestions or come accross any bugs, feel free to either submit them to the issues tab or submit your info to the existing issue if your bug is already there.
+* Currently, there is no full support for the individual classes within the game; there is only support for basic attacks, movement, and item usage. My current focus is somewhat split between fixing the existing issues and completing the missing pieces (along with school and the fact that I work 40+ hours a week...so please have patience).
