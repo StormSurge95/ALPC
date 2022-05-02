@@ -191,21 +191,117 @@ class Mage(PingCompensatedCharacter):
     async def entangle(self, target, essenceOfNature = None):
         async def entFn():
             nonlocal self, target, essenceOfNature
+            if not self.ready:
+                raise Exception("We aren't ready yet [entangle].")
             if essenceOfNature == None:
                 essenceOfNature = self.locateItem('essenceofnature')
+            if essenceOfNature == None:
+                raise Exception("We need an essenceofnature in order to entangle.")
+            tangled = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal self, tangled
+                if not tangled.done():
+                    self.socket.off('eval', cooldownCheck)
+                    tangled.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal self, tangled
+                if not tangled.done():
+                    self.socket.off('eval', cooldownCheck)
+                    tangled.set_result(value)
+            def cooldownCheck(data):
+                match = re.search('skill_timeout\s*\(\s*[\'"]entangle[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
+                if match != None:
+                    resolve()
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"entangle timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('eval', cooldownCheck)
+            await self.socket.emit('skill', { 'name': 'entangle', 'id': target, 'num': essenceOfNature })
+            while not tangled.done():
+                await asyncio.sleep(Constants.WAIT)
+            return tangled.result()
         return await Tools.tryExcept(entFn)
 
     async def light(self):
         async def lightFn():
             nonlocal self
+            if not self.ready:
+                raise Exception("We aren't ready yet [light].")
+            lit = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal self, lit
+                if not lit.done():
+                    self.socket.off('eval', cooldownCheck)
+                    lit.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal self, lit
+                if not lit.done():
+                    self.socket.off('eval', cooldownCheck)
+                    lit.set_result(value)
+            def cooldownCheck(data):
+                match = re.search('skill_timeout\s*\(\s*[\'"]light[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
+                if match != None:
+                    resolve()
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"light timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('eval', cooldownCheck)
+            await self.socket.emit('skill', { 'name': 'light' })
+            while not lit.done():
+                await asyncio.sleep(Constants.WAIT)
+            return lit.result()
         return await Tools.tryExcept(lightFn)
 
     async def magiport(self, target):
         async def magiFn():
             nonlocal self, target
+            if not self.ready:
+                raise Exception("We aren't ready yet [magiport].")
+            magiportOfferSent = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal self, magiportOfferSent
+                if not magiportOfferSent.done():
+                    self.socket.off('game_response', magiportCheck)
+                    magiportOfferSent.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal self, magiportOfferSent
+                if not magiportOfferSent.done():
+                    self.socket.off('game_response', magiportCheck)
+                    magiportOfferSent.set_result(value)
+            def magiportCheck(data):
+                if isinstance(data, dict):
+                    if data['response'] == 'magiport_failed' and data['id'] == target:
+                        reject(f"Magiport for {target} failed.")
+                    elif data['response'] == 'magiport_sent' and data['id'] == target:
+                        resolve()
+            Tools.setTimeout(reject, Constants.TIMEOUT, f"magiport timeout ({Constants.TIMEOUT}s)")
+            self.socket.on('game_response', magiportCheck)
+            await self.socket.emit('skill', { 'name': 'magiport', 'id': target })
+            while not magiportOfferSent.done():
+                await asyncio.sleep(Constants.WAIT)
+            return magiportOfferSent.result()
         return await Tools.tryExcept(magiFn)
 
     async def applyReflection(self, target):
         async def reFn():
             nonlocal self, target
+            if not self.ready:
+                raise Exception("We aren't ready yet [applyReflection].")
+            reflectioned = asyncio.get_event_loop().create_future()
+            def reject(reason = None):
+                nonlocal self, reflectioned
+                if not reflectioned.done():
+                    self.socket.off('eval', cooldownCheck)
+                    reflectioned.set_exception(Exception(reason))
+            def resolve(value = None):
+                nonlocal self, reflectioned
+                if not reflectioned.done():
+                    self.socket.off('eval', cooldownCheck)
+                    reflectioned.set_result(value)
+            def cooldownCheck(data):
+                match = re.search('skill_timeout\s*\(\s*[\'"]reflection[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
+                if match != None:
+                    resolve()
+            Tools.setTimeout(reject, Constants.TIMEOUT)
+            self.socket.on('eval', cooldownCheck)
+            await self.socket.emit('skill', { 'name': 'reflection', 'id': target })
+            while not reflectioned.done():
+                await asyncio.sleep(Constants.WAIT)
+            return reflectioned.result()
         return await Tools.tryExcept(reFn)
