@@ -6,7 +6,7 @@ Currently a major work in progress; but the current state is available through [
 ## Requirements
 This package currently requires `aiohttp`, `aiosignal`, `async-timeout`, `attrs`, `bidict`, `charset-normalizer`, `frozenlist`, `idna`, `igraph`, `multidict`, `python-engineio`, `setuptools`, `texttables`, `ujson`, and `yarl`. (Technially only some of these are dependencies of ALPC; others are dependencies of various dependencies).
 
-[b]All[/b] of these requirements are installable through pip, and their individual installations are also taken care of through the install of ALPC.
+**All** of these requirements are installable through pip, and their individual installations are also taken care of through the install of ALPC.
 
 ## Installation
 The PyPI page can be found [here]. In order to install, simply install the package using pip like so:
