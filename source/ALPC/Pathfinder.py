@@ -62,7 +62,7 @@ class Pathfinder:
     @staticmethod
     def addNodeToGraph(_map: str, _x: int, _y: int):
         try:
-            return Pathfinder.graph.vs.find(name_eq=f"{_map}:{_x},{_y}")
+            return Pathfinder.graph.vs.find(name=f"{_map}:{_x},{_y}")
         except Exception:
             return Pathfinder.graph.add_vertex(f"{_map}:{_x},{_y}", map=_map, x=_x, y=_y)
 
@@ -173,12 +173,12 @@ class Pathfinder:
         if ((link['data']['type'] == 'leave') or (link['data']['type'] == 'transport')):
             if link['data']['map'] == 'bank':
                 return 1000
-            if Tools.hasKey(costs, 'transport') and costs['transport'] != None:
+            if costs.get('transport'):
                 return costs['transport']
             else:
                 return Pathfinder.TRANSPORT_COST
         elif link['data']['type'] == 'enter':
-            if Tools.hasKey(costs, 'enter') and costs['enter'] != None:
+            if costs.get('enter'):
                 return costs['enter']
             else:
                 return Pathfinder.ENTER_COST
@@ -186,7 +186,7 @@ class Pathfinder:
             if avoidTownWarps:
                 return sys.maxsize
             else:
-                if Tools.hasKey(costs, 'town') and costs['town'] != None:
+                if costs.get('town'):
                      return costs['town']
                 else:
                     return Pathfinder.TOWN_COST
@@ -206,7 +206,7 @@ class Pathfinder:
     
     @staticmethod
     def getGrid(map: str, base = Constants.BASE):
-        if Tools.hasKey(Pathfinder.grids, map):
+        if Pathfinder.grids.get(map):
             return Pathfinder.grids[map]
         if Pathfinder.G == None:
             raise Exception("Prepare pathfinding before querying getGrid()!")
@@ -221,7 +221,6 @@ class Pathfinder:
         height = maxY - minY
 
         grid = [UNKNOWN] * (height * width)
-        yLineStart = datetime.now()
         for yLine in gGeo['y_lines']:
             lowerY = max([0, yLine[0] - minY - base['vn']])
             upperY = yLine[0] - minY + base['v']
@@ -277,89 +276,129 @@ class Pathfinder:
                     x += 1
         
         Pathfinder.grids[map] = grid
+        Pathfinder.updateGraph(grid, map)
+        return grid
 
-        walkableNodes = []
-        points = []
-        links = []
-        linkData = []
-        linkAttr = {}
+    @staticmethod
+    def updateGraph(grid, map):
+        gMap = Pathfinder.G['maps'][map]
+        gGeo = Pathfinder.G['geometry'][map]
+        minX = gGeo['min_x']
+        maxX = gGeo['max_x']
+        minY = gGeo['min_y']
+        maxY = gGeo['max_y']
+        width = maxX - minX
+        height = maxY - minY
 
-        #beginUpdate?
-        
+        walkableNodes = []  # list of walkable nodes
+        points = []         # list of points for delaunay
+        links = []          # list of links between walkable nodes as [point1, point2]
+        linkData = []       # list of dictionaries containing attributes for particular links
+        linkAttr = {}       # dictionary containing list of attributes for each link
+
+        # add nodes at corners
+        cornersStart = datetime.now()
+        Pathfinder.logger.debug("  Adding corners...")
+        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
         for y in range(1, height - 1):
             for x in range(1, width):
-                mC = grid[y * width + x]
-                if mC != WALKABLE:
+                # for each walkable x/y position...
+                middleCenter = grid[y * width + x]
+                if middleCenter != WALKABLE:
                     continue
-
-                bL = grid[(y - 1) * width + x - 1]
-                bC = grid[(y - 1) * width + x]
-                bR = grid[(y - 1) * width + x + 1]
-                mL = grid[y * width + x - 1]
-                mR = grid[y * width + x + 1]
-                uL = grid[(y + 1) * width + x - 1]
-                uC = grid[(y + 1) * width + x]
-                uR = grid[(y + 1) * width + x + 1]
+                
+                # get surrounding positions
+                bottomLeft = grid[(y - 1) * width + x - 1]
+                bottomCenter = grid[(y - 1) * width + x]
+                bottomRight = grid[(y - 1) * width + x + 1]
+                middleLeft = grid[y * width + x - 1]
+                middleRight = grid[y * width + x + 1]
+                upperLeft = grid[(y + 1) * width + x - 1]
+                upperCenter = grid[(y + 1) * width + x]
+                upperRight = grid[(y + 1) * width + x + 1]
 
                 mapX = x + minX
                 mapY = y + minY
 
-                if (bL == UNWALKABLE) and (bC == UNWALKABLE) and (bR == UNWALKABLE) and (mL == UNWALKABLE) and (uL == UNWALKABLE):
+                # inside-1
+                if (bottomLeft == UNWALKABLE) and (bottomCenter == UNWALKABLE) and (bottomRight == UNWALKABLE) and (middleLeft == UNWALKABLE) and (upperLeft == UNWALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-                elif (bL == UNWALKABLE) and (bC == UNWALKABLE) and (bR == UNWALKABLE) and (mR == UNWALKABLE) and (uR == UNWALKABLE):
+                # inside-2
+                elif (bottomLeft == UNWALKABLE) and (bottomCenter == UNWALKABLE) and (bottomRight == UNWALKABLE) and (middleRight == UNWALKABLE) and (upperRight == UNWALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-                elif (bR == UNWALKABLE) and (mR == UNWALKABLE) and (uL == UNWALKABLE) and (uC == UNWALKABLE) and (uR == UNWALKABLE):
+                # inside-3
+                elif (bottomRight == UNWALKABLE) and (middleRight == UNWALKABLE) and (upperLeft == UNWALKABLE) and (upperCenter == UNWALKABLE) and (upperRight == UNWALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-                elif (bL == UNWALKABLE) and (mL == UNWALKABLE) and (uL == UNWALKABLE) and (uC == UNWALKABLE) and (uR == UNWALKABLE):
+                # inside-4
+                elif (bottomLeft == UNWALKABLE) and (middleLeft == UNWALKABLE) and (upperLeft == UNWALKABLE) and (upperCenter == UNWALKABLE) and (upperRight == UNWALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-                elif (bL == UNWALKABLE) and (bC == WALKABLE) and (mL == WALKABLE):
+                # outside-1 
+                elif (bottomLeft == UNWALKABLE) and (bottomCenter == WALKABLE) and (middleLeft == WALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-                elif (bC == WALKABLE) and (bR == UNWALKABLE) and (mR == WALKABLE):
+                # outside-2
+                elif (bottomCenter == WALKABLE) and (bottomRight == UNWALKABLE) and (middleRight == WALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-                elif (mR == WALKABLE) and (uC == WALKABLE) and (uR == UNWALKABLE):
+                # outside-3
+                elif (middleRight == WALKABLE) and (upperCenter == WALKABLE) and (upperRight == UNWALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-                elif (mL == WALKABLE) and (uL == UNWALKABLE) and (uC == WALKABLE):
+                # outside-4
+                elif (middleLeft == WALKABLE) and (upperLeft == UNWALKABLE) and (upperCenter == WALKABLE):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
+        Pathfinder.logger.debug(f"  corner completion: {(datetime.now() - cornersStart).total_seconds()}\n")
         
+        # add nodes at transporters (we'll look for close nodes to transporters later)
+        transportersStart = datetime.now()
+        Pathfinder.logger.debug("  Adding transporter nodes...")
+        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
         transporters = []
         for npc in gMap['npcs']:
             if npc['id'] != 'transporter':
                 continue
-            closest = Pathfinder.findClosestSpawn(map, npc['position'][0], npc['position'][1])
+            pos = npc['position']
+            closest = Pathfinder.findClosestSpawn(map, pos[0], pos[1])
             fromNode = Pathfinder.addNodeToGraph(map, closest['x'], closest['y'])
             points.append([closest['x'], closest['y']])
             walkableNodes.append(fromNode)
             transporters.append(npc)
 
+            # make more points around transporter
             angle = 0
             while angle < math.pi * 2:
-                x = math.trunc(npc['position'][0] + math.cos(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
-                y = math.trunc(npc['position'][1] + math.sin(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
+                x = math.trunc(pos[0] + math.cos(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
+                y = math.trunc(pos[1] + math.sin(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
                 if Pathfinder.canStand({'map': map, 'x': x, 'y': y}):
                     fromNode = Pathfinder.addNodeToGraph(map, x, y)
                     points.append([x, y])
                     walkableNodes.append(fromNode)
                 angle += math.pi / 32
-        
+        Pathfinder.logger.debug(f"  transporter completion: {(datetime.now() - transportersStart).total_seconds()}\n")
+
+        # add nodes at doors (we'll look for close nodes to doors later)
+        doorsStart = datetime.now()
+        Pathfinder.logger.debug("  Adding door nodes...")
+        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
         doors = []
         for door in gMap['doors']:
+            #TODO: Figure out how to know if we have access to a locked door
             if len(door) > 7 and door[7] == 'complicated':
                 continue
 
+            # From
             spawn = gMap['spawns'][door[6]]
             fromDoor = Pathfinder.addNodeToGraph(map, spawn[0], spawn[1])
             points.append([spawn[0], spawn[1]])
             walkableNodes.append(fromDoor)
             doors.append(door)
 
+            # make more points around the door
             doorX = door[0]
             doorY = door[1]
             doorWidth = door[2]
@@ -380,7 +419,12 @@ class Pathfinder:
                         points.append([x, y])
                         walkableNodes.append(fromNode)
                     angle += math.pi / 32
+        Pathfinder.logger.debug(f"  door completion: {(datetime.now() - doorsStart).total_seconds()}\n")
         
+        # Add nodes at spawns
+        spawnsStart = datetime.now()
+        Pathfinder.logger.debug("  Adding spawn nodes...")
+        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
         townNode = Pathfinder.addNodeToGraph(map, gMap['spawns'][0][0], gMap['spawns'][0][1])
         walkableNodes.append(townNode)
         points.append([townNode['x'], townNode['y']])
@@ -390,25 +434,36 @@ class Pathfinder:
             node = Pathfinder.addNodeToGraph(map, spawn[0], spawn[1])
             walkableNodes.append(node)
             points.append([node['x'], node['y']])
+        Pathfinder.logger.debug(f"  spawns completion: {(datetime.now() - spawnsStart).total_seconds()}\n")
         
+        # collect link data
+        linksStart = datetime.now()
+        Pathfinder.logger.debug("  Adding walkable links...")
+        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
         for fromNode in walkableNodes:
+            # add destination nodes and links to maps that are reachable through the door(s)
             for door in doors:
                 if Pathfinder.doorDistance(fromNode, door) >= Constants.DOOR_REACH_DISTANCE:
-                    continue
+                    continue # door is too far away
+                # To:
                 spawn2 = Pathfinder.G['maps'][door[4]]['spawns'][door[5]]
                 toDoor = Pathfinder.addNodeToGraph(door[4], spawn2[0], spawn2[1])
+                # instance door (requires 'enter' function)
                 if len(door) > 7 and door[7] == 'key':
                     links.append([fromNode, toDoor])
                     linkData.append({ 'key': door[8], 'map': toDoor['map'], 'type': 'enter', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': None })
+                # map door (requires 'transport' function)
                 else:
                     links.append([fromNode, toDoor])
                     linkData.append({ 'key': None, 'map': toDoor['map'], 'type': 'transport', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': door[5] })
+            # add destination nodes and links to maps that are reachable through the transporter(s)
             for npc in transporters:
-                if Tools.distance(fromNode, { 'x': npc['position'][0], 'y': npc['position'][1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
-                    continue
-                for toMap in Pathfinder.G['npcs']['transporter']['places'].keys():
+                pos = npc['position']
+                if Tools.distance(fromNode, { 'x': pos[0], 'y': pos[1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
+                    continue # transporter is too far away
+                for toMap in list(Pathfinder.G['npcs']['transporter']['places']):
                     if map == toMap:
-                        continue
+                        continue # don't add links to ourself
 
                     spawnID = Pathfinder.G['npcs']['transporter']['places'][toMap]
                     spawn = Pathfinder.G['maps'][toMap]['spawns'][spawnID]
@@ -420,14 +475,17 @@ class Pathfinder:
         leaveLink = Pathfinder.addNodeToGraph('main', Pathfinder.G['maps']['main']['spawns'][0][0], Pathfinder.G['maps']['main']['spawns'][0][1])
         leaveLinkData = { 'map': leaveLink['map'], 'type': 'leave', 'x': leaveLink['x'], 'y': leaveLink['y'], 'key': None, 'spawn': None }
         for node in walkableNodes:
+            # create town links
             if node != townNode:
                 links.append([node, townNode])
                 linkData.append({ 'key': townLinkData['key'], 'map': townLinkData['map'], 'type': townLinkData['type'], 'x': townLinkData['x'], 'y': townLinkData['y'], 'spawn': townLinkData['spawn'] })
             
+            # create leave links
             if map == 'cyberland' or map == 'jail':
                 links.append([node, leaveLink])
                 linkData.append({ 'key': leaveLinkData['key'], 'map': leaveLinkData['map'], 'type': leaveLinkData['type'], 'x': leaveLinkData['x'], 'y': leaveLinkData['y'], 'spawn': leaveLinkData['spawn'] })
 
+        # check if we can walk to other nodes
         delaunay = Delaunator(points)
         
         for i in range(0, len(delaunay.halfedges)):
@@ -454,8 +512,6 @@ class Pathfinder:
 
         linkAttr['data'] = linkData
         Pathfinder.graph.add_edges(links, linkAttr)
-            
-        return grid
     
     @staticmethod
     def findClosestNode(map: str, x: int, y: int):
