@@ -9,7 +9,7 @@ This package currently requires `aiohttp`, `aiosignal`, `async-timeout`, `attrs`
 **All** of these requirements are installable through pip, and their individual installations are also taken care of through the install of ALPC.
 
 ## Installation
-The PyPI page can be found [here]. In order to install, simply install the package using pip like so:
+The PyPI page can be found [here](https://pypi.org/project/ALPC/). In order to install, simply install the package using pip like so:
 <details><summary>Unix/Linux</summary>
 
   ```
