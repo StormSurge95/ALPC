@@ -11,7 +11,7 @@ class Constants:
     STALE_PROJECTILE_S: int = 10
     TIMEOUT: int = 1
     UPDATE_POSITIONS_EVERY_S: float = 0.025
-    WAIT: float = 0.1
+    SLEEP: float = 0.1
 
     ## Various distance related things ##
     MAX_VISIBLE_RANGE: int = 800

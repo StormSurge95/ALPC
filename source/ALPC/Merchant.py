@@ -61,7 +61,7 @@ class Merchant(PingCompensatedCharacter):
             self.socket.on('player', failCheck3)
             await self.socket.emit('skill', { 'name': 'fishing' })
             while not fished.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return fished.result()
         return await Tools.tryExcept(fishFn)
 
@@ -165,7 +165,7 @@ class Merchant(PingCompensatedCharacter):
             self.socket.on('player', successCheck)
             await self.socket.emit('equip', { 'num': itemPos, 'price': price, 'q': quantity, 'slot': tradeSlot })
             while not listed.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return listed.result()
         return await Tools.tryExcept(listFn)
 
@@ -231,7 +231,7 @@ class Merchant(PingCompensatedCharacter):
             self.socket.on('eval', caughtCheck)
             await self.socket.emit('skill', { 'name': 'mining' })
             while not mined.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return mined.result()
         return await Tools.tryExcept(mineFn)
 
@@ -300,7 +300,7 @@ class Merchant(PingCompensatedCharacter):
             await self.socket.emit('skill', { 'id': target, 'name': 'mluck' })
             self.nextSkill['mluck'] = datetime.now() + self.G['skills']['mluck']['cooldown']
             while not mlucked.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return mlucked.result()
         return await Tools.tryExcept(luckFn)
 
@@ -328,7 +328,7 @@ class Merchant(PingCompensatedCharacter):
             self.socket.on('ui', productionedCheck)
             await self.socket.emit('skill', { 'name': 'massproduction' })
             while not massProductioned.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return massProductioned.result()
         return await Tools.tryExcept(mProdFn)
     

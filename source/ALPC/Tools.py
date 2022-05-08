@@ -61,4 +61,4 @@ class Tools:
             return await func(*args, **kwargs)
         except Exception as e:
             Tools.logger.exception(e)
-            return
+            return False

@@ -332,6 +332,6 @@ class Observer(object):
             self.socket.on('ping_ack', successCheck)
             await self.socket.emit('ping_trig', { 'id': pingID })
             while not pinged.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return pinged.result()
         return await Tools.tryExcept(pingFn)

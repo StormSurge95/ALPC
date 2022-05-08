@@ -31,7 +31,7 @@ class Paladin(PingCompensatedCharacter):
             self.socket.on('player', successCheck)
             await self.socket.emit('skill', { 'name': 'mshield' })
             while not unshield.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return unshield.result()
         return await Tools.tryExcept(msOffFn)
     
@@ -59,7 +59,7 @@ class Paladin(PingCompensatedCharacter):
             self.socket.on('player', successCheck)
             await self.socket.emit('skill', { 'name': 'mshield' })
             while not shielded.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return shielded.result()
         return await Tools.tryExcept(msOnFn)
     
@@ -86,6 +86,6 @@ class Paladin(PingCompensatedCharacter):
             self.socket.on('eval', cooldownCheck)
             await self.socket.emit('skill', { 'name': 'selfheal' })
             while not healed.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return healed.result()
         return await Tools.tryExcept(healFn)

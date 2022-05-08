@@ -33,7 +33,7 @@ class Mage(PingCompensatedCharacter):
             self.socket.on('eval', cooldownCheck)
             await self.socket.emit('skill', { 'name': 'alchemy' })
             while not performedAlchemy.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return performedAlchemy.result()
         return await Tools.tryExcept(alcFn)
     
@@ -74,7 +74,7 @@ class Mage(PingCompensatedCharacter):
             self.socket.on('game_response', failCheck)
             await self.socket.emit('skill', { 'name': 'blink', 'x': x, 'y': y })
             while not blinked.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return blinked.result()
         return await Tools.tryExcept(blinkFn)
 
@@ -102,7 +102,7 @@ class Mage(PingCompensatedCharacter):
             self.socket.on('eval', cooldownCheck)
             await self.socket.emit('skill', { 'name': 'burst', 'id': target })
             while not bursted.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return bursted.result()
         return await Tools.tryExcept(burstFn)
 
@@ -153,7 +153,7 @@ class Mage(PingCompensatedCharacter):
             await self.socket.emit('skill', { 'name': 'cburst', 'targets': targets })
             Tools.setTimeout(reject, Constants.TIMEOUT, f"cburst timeout ({Constants.TIMEOUT}s)")
             while not cbursted.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return cbursted.result()
         return await Tools.tryExcept(cBurstFn)
 
@@ -184,7 +184,7 @@ class Mage(PingCompensatedCharacter):
             else:
                 await self.socket.emit('skill', { 'id': target, 'name': 'energize' })
             while not energized.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return energized.result()
         return await Tools.tryExcept(enFn)
 
@@ -216,7 +216,7 @@ class Mage(PingCompensatedCharacter):
             self.socket.on('eval', cooldownCheck)
             await self.socket.emit('skill', { 'name': 'entangle', 'id': target, 'num': essenceOfNature })
             while not tangled.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return tangled.result()
         return await Tools.tryExcept(entFn)
 
@@ -244,7 +244,7 @@ class Mage(PingCompensatedCharacter):
             self.socket.on('eval', cooldownCheck)
             await self.socket.emit('skill', { 'name': 'light' })
             while not lit.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return lit.result()
         return await Tools.tryExcept(lightFn)
 
@@ -274,7 +274,7 @@ class Mage(PingCompensatedCharacter):
             self.socket.on('game_response', magiportCheck)
             await self.socket.emit('skill', { 'name': 'magiport', 'id': target })
             while not magiportOfferSent.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return magiportOfferSent.result()
         return await Tools.tryExcept(magiFn)
 
@@ -302,6 +302,6 @@ class Mage(PingCompensatedCharacter):
             self.socket.on('eval', cooldownCheck)
             await self.socket.emit('skill', { 'name': 'reflection', 'id': target })
             while not reflectioned.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return reflectioned.result()
         return await Tools.tryExcept(reFn)

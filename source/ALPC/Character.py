@@ -336,7 +336,7 @@ class Character(Observer):
             
             Tools.setTimeout(reject, Constants.CONNECT_TIMEOUT_S, f'Failed to start within {Constants.CONNECT_TIMEOUT_S}s.')
             while not connected.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return connected.result()
 
         return await Tools.tryExcept(connectedFn)
@@ -376,7 +376,7 @@ class Character(Observer):
 
             await self.socket.emit('send_updates')
             while not entitiesData.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return entitiesData.result()
         return await Tools.tryExcept(entitiesDataFn)
 
@@ -402,7 +402,7 @@ class Character(Observer):
 
             await self.socket.emit('property', {'typing': True})
             while not playerData.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return playerData.result()
 
         return await Tools.tryExcept(playerDataFn)
@@ -438,7 +438,7 @@ class Character(Observer):
             
             await self.socket.emit('friend', { 'event': 'accept', 'name': id })
             while not friended.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return friended.result()
 
         return await Tools.tryExcept(friendReqFn)
@@ -464,7 +464,7 @@ class Character(Observer):
             self.socket.on('new_map', magiportCheck)
             await self.socket.emit('magiport', { 'name': name })
             while not acceptedMagiport.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return acceptedMagiport.result()
 
         return await Tools.tryExcept(magiportFn)
@@ -505,7 +505,7 @@ class Character(Observer):
             self.socket.on('game_log', unableCheck)
             await self.socket.emit('party', { 'event': 'accept', 'name': id })
             while not acceptedInvite.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return acceptedInvite.result()
 
         return await Tools.tryExcept(partyInvFn)
@@ -532,7 +532,7 @@ class Character(Observer):
             self.socket.on('party_update', partyCheck)
             await self.socket.emit('party', { 'event': 'raccept', 'name': id })
             while not acceptedRequest.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return acceptedRequest.result()
         
         return await Tools.tryExcept(partyReqFn)
@@ -588,7 +588,7 @@ class Character(Observer):
             self.socket.on('death', deathCheck)
             await self.socket.emit('attack', { 'id': id })
             while not attackStarted.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return attackStarted.result()
         return await Tools.tryExcept(attackFn)
 
@@ -634,7 +634,7 @@ class Character(Observer):
             else:
                 await self.socket.emit('buy', { 'name': itemName })
             while not itemReceived.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return itemReceived.result()
         return await Tools.tryExcept(buyFn)
 
@@ -685,7 +685,7 @@ class Character(Observer):
             invTokens = self.locateItem(tokenTypeNeeded)
             await self.socket.emit('exchange_buy', { 'name': itemName, 'num': invTokens, 'q': self.items[invTokens]['q'] })
             while not itemReceived.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return itemReceived.result()
         return await Tools.tryExcept(tokenBuyFn)
 
@@ -738,7 +738,7 @@ class Character(Observer):
             self.socket.on('ui', buyCheck)
             await self.socket.emit('trade_buy', { 'id': id, 'q': str(quantity), 'rid': rid, 'slot': slot })
             while not itemBought.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return itemBought.result()
         return await Tools.tryExcept(merchantBuyFn)
 
@@ -777,7 +777,7 @@ class Character(Observer):
             self.socket.on('player', successCheck)
             await self.socket.emit('sbuy', { 'rid': item['rid'] })
             while not bought.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return bought.result()
         return await Tools.tryExcept(pontyBuyFn)
 
@@ -1143,7 +1143,7 @@ class Character(Observer):
             self.socket.on('player', checkStand)
             await self.socket.emit('merchant', {'close': 1})
             while not closed.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return closed.result()
         return await Tools.tryExcept(closeFn)
 
@@ -1210,7 +1210,7 @@ class Character(Observer):
             else:
                 await self.socket.emit('compound', { 'clevel': item1Info['level'], 'items': [item1Pos, item2Pos, item3Pos], 'offering_num': offeringPos, 'scroll_num': cscrollPos })
             while not compoundComplete.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return compoundComplete.result()
         
         return await Tools.tryExcept(compoundFn)
@@ -1262,7 +1262,7 @@ class Character(Observer):
             self.socket.on('game_response', successCheck)
             await self.socket.emit('craft', { 'items': itemPositions })
             while not crafted.done():
-                    await asyncio.sleep(Constants.WAIT)
+                    await asyncio.sleep(Constants.SLEEP)
             return crafted.result()    
         return await Tools.tryExcept(craftedFn)
 
@@ -1376,7 +1376,7 @@ class Character(Observer):
             self.socket.on('player', checkDeposit)
             await self.socket.emit('bank', { 'inv': inventoryPos, 'operation': 'swap', 'pack': bankPack, 'str': bankSlot })
             while not swapped.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return swapped.result()
         return await Tools.tryExcept(swapFn)
 
@@ -1413,7 +1413,7 @@ class Character(Observer):
             self.socket.on('emotion', successCheck)
             await self.socket.emit('emotion', { 'name': emotionName })
             while not emoted.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return emoted.result()
         return await Tools.tryExcept(emoteFn)
 
@@ -1464,7 +1464,7 @@ class Character(Observer):
             self.socket.on('game_response', failCheck)
             await self.socket.emit('enter', { 'name': instance, 'place': map })
             while not enterComplete.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return enterComplete.result()
         return await Tools.tryExcept(enterFn)
 
@@ -1507,7 +1507,7 @@ class Character(Observer):
             self.socket.on('disappearing_text', cantEquipCheck)
             await self.socket.emit('equip', { 'num': inventoryPos, 'slot': equipSlot })
             while not equipFinished.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return equipFinished.result()
         
         return await Tools.tryExcept(equipFn)
@@ -1557,7 +1557,7 @@ class Character(Observer):
             q = self.items[inventoryPos]['q'] if Tools.hasKey(self.items[inventoryPos], 'q') else None
             await self.socket.emit('exchange', { 'item_num': inventoryPos, 'q': q })
             while not exchangeFinished.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return exchangeFinished.result()
         return await Tools.tryExcept(exchangeFn)
 
@@ -1594,7 +1594,7 @@ class Character(Observer):
             self.socket.on('player', successCheck)
             await self.socket.emit('monsterhunt')
             while not questFinished.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return questFinished.result()
         return await Tools.tryExcept(questFn)
 
@@ -1747,7 +1747,7 @@ class Character(Observer):
             self.socket.on('player', successCheck)
             await self.socket.emit('monsterhunt')
             while not questGot.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return questGot.result()
         return await Tools.tryExcept(questFn)
 
@@ -1770,7 +1770,7 @@ class Character(Observer):
             self.socket.on('players', dataCheck)
             await self.socket.emit('players')
             while not playersData.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return playersData.result()
         return await Tools.tryExcept(playersFn)
 
@@ -1799,7 +1799,7 @@ class Character(Observer):
             self.socket.on('game_response', distanceCheck)
             await self.socket.emit('secondhands')
             while not pontyItems.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return pontyItems.result()
         return await Tools.tryExcept(pontyFn)
 
@@ -1828,7 +1828,7 @@ class Character(Observer):
             self.socket.on('tracker', gotCheck)
             await self.socket.emit('tracker')
             while not gotData.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return gotData.result()
         return await Tools.tryExcept(trackerFn)
 
@@ -1862,7 +1862,7 @@ class Character(Observer):
             self.socket.on('party_update', kickedCheck)
             await self.socket.emit('party', { 'event': 'kick', 'name': toKick })
             while not kicked.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return kicked.result()
         return await Tools.tryExcept(kickFn)
 
@@ -1893,7 +1893,7 @@ class Character(Observer):
             self.socket.on('game_response', failCheck)
             await self.socket.emit('leave')
             while not leaveComplete.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return leaveComplete.result()
         return await Tools.tryExcept(leaveFn)
 
@@ -1976,7 +1976,7 @@ class Character(Observer):
                 self.going_y = to['y']
                 self.moving = True
             while not moveFinished.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return moveFinished.result()
 
         return await Tools.tryExcept(moveFn)
@@ -2002,7 +2002,7 @@ class Character(Observer):
             self.socket.on('chest_opened', openCheck)
             await self.socket.emit('open_chest', { 'id': id })
             while not chestOpened.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return chestOpened.result()
         return await Tools.tryExcept(chestFn)
 
@@ -2032,7 +2032,7 @@ class Character(Observer):
             self.socket.on('player', checkStand)
             await self.socket.emit('merchant', { 'num': stand })
             while not opened.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return opened.result()
         return await Tools.tryExcept(standFn)
 
@@ -2063,7 +2063,7 @@ class Character(Observer):
             self.socket.on('disappearing_text', failCheck)
             await self.socket.emit('use', { 'item': 'hp' })
             while not regenReceived.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return regenReceived.result()
         return await Tools.tryExcept(regenHPFn)
 
@@ -2094,7 +2094,7 @@ class Character(Observer):
             self.socket.on('disappearing_text', failCheck)
             await self.socket.emit('use', { 'item': 'mp' })
             while not regenReceived.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return regenReceived.result()
         return await Tools.tryExcept(regenMPFn)
 
@@ -2125,7 +2125,7 @@ class Character(Observer):
             self.socket.on('game_log', failCheck)
             await self.socket.emit('respawn', { 'safe': safe })
             while not respawned.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return respawned.result()
         return await Tools.tryExcept(respawnFn)
 
@@ -2171,7 +2171,7 @@ class Character(Observer):
             self.socket.on('eval', cooldownCheck)
             await self.socket.emit('skill', { 'name': 'scare' })
             while not scared.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return scared.result()
         return await Tools.tryExcept(scareFn)
 
@@ -2215,7 +2215,7 @@ class Character(Observer):
             self.socket.on('game_response', failCheck)
             await self.socket.emit('sell', { 'num': itemPos, 'quantity': quantity })
             while not sold.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return sold.result()
         return Tools.tryExcept(sellFn)
 
@@ -2270,7 +2270,7 @@ class Character(Observer):
             self.socket.on('game_response', failCheck)
             await self.socket.emit('trade_sell', { 'id': id, 'q': q, 'rid': rid, 'slot': slot })
             while not sold.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return sold.result()
         return await Tools.tryExcept(sellFn)
 
@@ -2324,7 +2324,7 @@ class Character(Observer):
             self.socket.on('pm', sentCheck)
             await self.socket.emit('say', { 'message': message, 'name': to })
             while not sent.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return sent.result()
         return await Tools.tryExcept(sendFn)
 
@@ -2356,7 +2356,7 @@ class Character(Observer):
             self.socket.on('game_error', failCheck)
             await self.socket.emit('say', { 'message': message })
             while not sent.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return sent.result()
         return await Tools.tryExcept(sentFn)
 
@@ -2387,7 +2387,7 @@ class Character(Observer):
             self.socket.on('game_response', check)
             await self.socket.emit('friend', { 'event': 'request', 'name': id })
             while not requestSent.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return requestSent.result()
         return await Tools.tryExcept(friendRequestFn)
 
@@ -2428,7 +2428,7 @@ class Character(Observer):
             self.socket.on('game_response', sentCheck)
             await self.socket.emit('send', { 'gold': amount, 'name': to })
             while not goldSent.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return goldSent.result()
         return await Tools.tryExcept(sendFn)
 
@@ -2466,7 +2466,7 @@ class Character(Observer):
             self.socket.on('game_response', sentCheck)
             await self.socket.emit('send', { 'name': to, 'num': inventoryPos, 'q': quantity })
             while not itemSent.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return itemSent.result()
         return await Tools.tryExcept(sendFn)
 
@@ -2494,7 +2494,7 @@ class Character(Observer):
             self.socket.on('game_log', sentCheck)
             await self.socket.emit('party', { 'event': 'invite', 'name': id })
             while not invited.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return invited.result()
         return await Tools.tryExcept(inviteFn)
 
@@ -2768,7 +2768,7 @@ class Character(Observer):
             await self.socket.emit('interaction', { 'key': 'A' })
             await self.socket.emit('interaction', { 'key': 'enter' })
             while not started.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return started.result()
         return await Tools.tryExcept(startFn)
 
@@ -2827,7 +2827,7 @@ class Character(Observer):
             self.socket.on('player', successCheck)
             await self.socket.emit('imove', { 'a': itemPosA, 'b': itemPosB })
             while not itemsSwapped.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return itemsSwapped.result()
         return await Tools.tryExcept(swapFn)
 
@@ -2855,7 +2855,7 @@ class Character(Observer):
             self.socket.on('game_response', successCheck)
             await self.socket.emit('mail_take_item', { 'id': mailID })
             while not itemReceived.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return itemReceived.result()
         return await Tools.tryExcept(getItemFn)
 
@@ -2898,7 +2898,7 @@ class Character(Observer):
             self.socket.on('eval', cooldownCheck)
             await self.socket.emit('skill', { 'id': target, 'name': 'snowball', 'num': snowball })
             while not throwStarted.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return throwStarted.result()
         return await Tools.tryExcept(throwFn)
 
@@ -2939,7 +2939,7 @@ class Character(Observer):
             self.socket.on('new_map', transportCheck)
             await self.socket.emit('transport', { 's': spawn, 'to': map })
             while not transportComplete.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return transportComplete.result()
         return await Tools.tryExcept(transportFn)
 
@@ -2994,7 +2994,7 @@ class Character(Observer):
             self.socket.on('player', unequipCheck)
             await self.socket.emit('unequip', { 'slot': slot })
             while not unequipped.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return unequipped.result()
         return await Tools.tryExcept(unequipFn)
 
@@ -3029,7 +3029,7 @@ class Character(Observer):
             self.socket.on('game_response', failCheck)
             await self.socket.emit('friend', { 'event': 'unfriend', 'name': id })
             while not unfriended.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return unfriended.result()
         return await Tools.tryExcept(unfriendFn)
 
@@ -3104,7 +3104,7 @@ class Character(Observer):
             self.socket.on('player', playerCheck)
             await self.socket.emit('upgrade', { 'clevel': self.items[itemPos]['level'], 'item_num': itemPos, 'offering_num': offeringPos, 'scroll_num': scrollPos })
             while not upgradeComplete.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return upgradeComplete.result()
         return await Tools.tryExcept(upgradeFn)
 
@@ -3147,7 +3147,7 @@ class Character(Observer):
             self.socket.on('disappearing_text', failCheck)
             await self.socket.emit('equip', { 'consume': True, 'num': itemPos })
             while not healReceived.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return healReceived.result()
         return await Tools.tryExcept(healFn)
 
@@ -3190,7 +3190,7 @@ class Character(Observer):
             self.socket.on('disappearing_text', failCheck)
             await self.socket.emit('equip', { 'consume': True, 'num': itemPos })
             while not healReceived.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return healReceived.result()
         return await Tools.tryExcept(healFn)
 
@@ -3244,7 +3244,7 @@ class Character(Observer):
             if not startedWarp:
                 await self.socket.emit('town')
             while not warpComplete.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return warpComplete.result()
         return await Tools.tryExcept(warpFn)
 
@@ -3310,7 +3310,7 @@ class Character(Observer):
             self.socket.on('player', checkWithdrawal)
             await self.socket.emit('bank', { 'inv': inventoryPos, 'operation': 'swap', 'pack': bankPack, 'str': bankPos })
             while not swapped.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             return swapped.result()
         return await Tools.tryExcept(itemFn)
 
@@ -3351,7 +3351,7 @@ class Character(Observer):
             self.socket.on('game_response', failCheck)
             await self.socket.emit('skill', { 'id': id, 'name': 'zapperzap' })
             while not zapped.done():
-                await asyncio.sleep(Constants.WAIT)
+                await asyncio.sleep(Constants.SLEEP)
             self.nextSkill['zapperzap'] = datetime.now() + timedelta(milliseconds=self.G['skills']['zapperzap']['cooldown'])
             return zapped.result()
         return await Tools.tryExcept(zapFn)

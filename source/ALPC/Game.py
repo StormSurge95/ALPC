@@ -6,7 +6,13 @@ import logging
 import logging.config
 import sys
 from .Observer import Observer
-from .Character import Character
+from .Mage import Mage
+from .Merchant import Merchant
+from .Paladin import Paladin
+from .Priest import Priest
+# from .Ranger import Ranger
+# from .Rogue import Rogue
+# from .Warrior import Warrior
 from .PingCompensatedCharacter import PingCompensatedCharacter
 
 logger = logging.getLogger(__name__)
@@ -268,64 +274,36 @@ class Game:
             await Game.updateServersAndCharacters(session)
         if not bool(getattr(Game, 'G')):
             await Game.getGData(session, True, True)
-        userInfo = str(session.cookie_jar.filter_cookies('https://adventure.land')['auth'].value)
-        userID = userInfo.split('-')[0]
-        userAuth = userInfo.split('-')[1]
         if not Game.characters.get(cName):
             logger.error(f"You don't have a character with the name '{cName}'")
             raise Exception()
+        userInfo = str(session.cookie_jar.filter_cookies('https://adventure.land')['auth'].value)
+        userID = userInfo.split('-')[0]
+        userAuth = userInfo.split('-')[1]
         characterID = Game.characters[cName]['id']
 
         player = None
-        player = PingCompensatedCharacter(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
+        ctype = Game.characters[cName]['type']
+        if ctype == 'mage':
+            player = Mage(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
+        elif ctype == 'merchant':
+            player = Merchant(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
+        elif ctype == 'paladin':
+            player = Paladin(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
+        elif ctype == 'priest':
+            player = Priest(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
+        elif ctype == 'ranger':
+            pass
+        elif ctype == 'rogue':
+            pass
+        elif ctype == 'warrior':
+            pass
+        else:
+            player = PingCompensatedCharacter(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
+
         await player.connect()
         return player
-        #ctype = self.characters[cName].type
-        #if ctype == 'mage':
-        #    pass
-        #elif ctype == 'merchant':
-        #    pass
-        #elif ctype == 'paladin':
-        #    pass
-        #elif ctype == 'priest':
-        #    pass
-        #elif ctype == 'ranger':
-        #    pass
-        #elif ctype == 'rogue':
-        #    pass
-        #elif ctype == 'warrior':
-        #    pass
-        #else:
-        #    pass
-
-    @staticmethod
-    async def startMage(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):
-        pass
-
-    @staticmethod
-    async def startMerchant(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):
-        pass
-
-    @staticmethod
-    async def startPaladin(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):
-        pass
-
-    @staticmethod
-    async def startPriest(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):
-        pass
-
-    @staticmethod
-    async def startRanger(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):
-        pass
-
-    @staticmethod
-    async def startRogue(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):
-        pass
-
-    @staticmethod
-    async def startWarrior(session: aiohttp.ClientSession, cName: str, sRegion: str, sID: str):
-        pass
-
+            
     @staticmethod
     async def startObserver(session: aiohttp.ClientSession, region: str, id: str):
         if not Game.loggedIn:
