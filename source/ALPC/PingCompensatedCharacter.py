@@ -18,7 +18,13 @@ class PingCompensatedCharacter(Character):
             raise e
     
     def setNextSkill(self, skill, next):
-        super().setNextSkill(skill, datetime(next.year, next.month, next.day, next.hour, next.minute, next.second - self.ping, next.microsecond, next.tzinfo, fold=next.fold))
+        second = next.second - self.ping
+        wholeSecond = math.floor(second)
+        microsecond = next.microsecond + math.ceil((second - wholeSecond) * 1000000)
+        while microsecond >= 1000000:
+            microsecond -= 999999
+            wholeSecond += 1
+        super().setNextSkill(skill, datetime(next.year, next.month, next.day, next.hour, next.minute, wholeSecond, microsecond, next.tzinfo))
     
     def parseCharacter(self, data) -> None:
         super().parseCharacter(data)

@@ -112,7 +112,8 @@ class Character(Observer):
             if skillReg.group(2):
                 cooldown = float(skillReg.group(2))
             if cooldown is not None:
-                next = datetime.now() + math.ceil(cooldown)
+                delta = timedelta(milliseconds=int(math.ceil(cooldown)))
+                next = datetime.now() + delta
                 self.setNextSkill(skill, next)
             return
         

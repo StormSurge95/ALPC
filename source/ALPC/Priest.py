@@ -23,7 +23,7 @@ class Priest(PingCompensatedCharacter):
                     self.socket.off('eval', cooldownCheck)
                     absorbed.set_result(value)
             def cooldownCheck(data):
-                match = re.search('skill_timeout\s*[\'"]absorb[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
+                match = re.search('skill_timeout\s*\(\s*[\'"]absorb[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
                 if match != None:
                     resolve(True)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"absorbSins timeout ({Constants.TIMEOUT}s)")
@@ -49,7 +49,7 @@ class Priest(PingCompensatedCharacter):
                 if not cursed.done():
                     cursed.set_result(value)
             def cooldownCheck(data):
-                match = re.search('skill_timeout\s*[\'"]curse[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
+                match = re.search('skill_timeout\s*\(\s*[\'"]curse[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
                 if match != None:
                     resolve(True)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"curse timeout ({Constants.TIMEOUT}s)")
@@ -139,7 +139,7 @@ class Priest(PingCompensatedCharacter):
             while not healed.done():
                 await asyncio.sleep(Constants.SLEEP)
             return healed.result()
-        return Tools.tryExcept(healFn)
+        return await Tools.tryExcept(healFn)
     
     async def partyHeal(self):
         async def partyHealFn():
@@ -157,7 +157,8 @@ class Priest(PingCompensatedCharacter):
                     self.socket.off('eval', cooldownCheck)
                     partyHealed.set_result(value)
             def cooldownCheck(data):
-                match = re.search('skill_timeout\s*[\'"]partyheal[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
+                print(data)
+                match = re.search('skill_timeout\s*\(\s*[\'"]partyheal[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
                 if match != None:
                     resolve(True)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"partyHeal timeout ({Constants.TIMEOUT}s)")
@@ -189,7 +190,7 @@ class Priest(PingCompensatedCharacter):
                     self.socket.off('eval', cooldownCheck)
                     revived.set_result(value)
             def cooldownCheck(data):
-                match = re.search('skill_timeout\s*[\'"]revive[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
+                match = re.search('skill_timeout\s*\(\s*[\'"]revive[\'"]\s*,?\s*(\d+\.?\d+?)?\s*\)', data['code'])
                 if match != None:
                     resolve(True)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"revive timeout ({Constants.TIMEOUT}s)")
