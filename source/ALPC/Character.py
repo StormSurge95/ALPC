@@ -2130,8 +2130,6 @@ class Character(Observer):
         return await Tools.tryExcept(respawnFn)
 
     async def scare(self) -> list[str]:
-        
-        
         async def scareFn():
             nonlocal self
             if not self.ready:
