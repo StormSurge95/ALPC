@@ -20,19 +20,19 @@ class Tools:
     def distance(a, b):
         try:
             mapA = a.map if hasattr(a, 'map') else a['map']
-        except Exception:
+        except:
             mapA = None
-        xA = a.x if hasattr(a, 'x') else a['x']
-        yA = a.y if hasattr(a, 'y') else a['y']
         try:
             mapB = b.map if hasattr(b, 'map') else b['map']
-        except Exception:
+        except:
             mapB = None
-        xB = b.x if hasattr(b, 'x') else b['x']
-        yB = b.y if hasattr(b, 'y') else b['y']
-        
         if (mapA != None) and (mapB != None) and (mapA != mapB):
             return sys.maxsize
+        
+        xA = a.x if hasattr(a, 'x') else a['x']
+        yA = a.y if hasattr(a, 'y') else a['y']
+        xB = b.x if hasattr(b, 'x') else b['x']
+        yB = b.y if hasattr(b, 'y') else b['y']
         return math.hypot(xA - xB, yA - yB)
 
     @staticmethod

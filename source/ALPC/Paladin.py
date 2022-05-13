@@ -25,7 +25,7 @@ class Paladin(PingCompensatedCharacter):
                     self.socket.off('player', successCheck)
                     unshield.set_result(value)
             def successCheck(data):
-                if not Tools.hasKey(data, 's') or not Tools.hasKey(data.s, 'mshield'):
+                if data.get('s') == None or data['s'].get('mshield') == None:
                     resolve(True)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"manaShieldOff timeout ({Constants.TIMEOUT}s)")
             self.socket.on('player', successCheck)
@@ -53,7 +53,7 @@ class Paladin(PingCompensatedCharacter):
                     self.socket.off('player', successCheck)
                     shielded.set_result(value)
             def successCheck(data):
-                if data.get('s', {}).get('mshield'):
+                if data.get('s', {}).get('mshield') != None:
                     resolve(True)
             Tools.setTimeout(reject, Constants.TIMEOUT, f"manaShieldOn timeout ({Constants.TIMEOUT}s)")
             self.socket.on('player', successCheck)
