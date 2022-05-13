@@ -9,8 +9,10 @@ from .Pathfinder import Pathfinder
 from .PingCompensatedCharacter import PingCompensatedCharacter
 from .Player import Player
 from .Priest import Priest
+from .Ranger import Ranger
+from .Rogue import Rogue
 from .Tools import Tools
 
 __all__ = [ 'Character', 'Constants', 'Entity', 'Game', 'Mage', 'Observer',
             'Paladin', 'Pathfinder', 'PingCompensatedCharacter', 'Player',
-            'Priest', 'Tools' ]
+            'Priest', 'Ranger', 'Rogue', 'Tools' ]
