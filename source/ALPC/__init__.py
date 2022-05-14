@@ -12,7 +12,8 @@ from .Priest import Priest
 from .Ranger import Ranger
 from .Rogue import Rogue
 from .Tools import Tools
+from .Warrior import Warrior
 
 __all__ = [ 'Character', 'Constants', 'Entity', 'Game', 'Mage', 'Observer',
             'Paladin', 'Pathfinder', 'PingCompensatedCharacter', 'Player',
-            'Priest', 'Ranger', 'Rogue', 'Tools' ]
+            'Priest', 'Ranger', 'Rogue', 'Tools', 'Warrior' ]
