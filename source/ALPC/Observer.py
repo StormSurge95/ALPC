@@ -1,6 +1,6 @@
 import asyncio
 from . import psSocketIO
-import datetime
+from datetime import datetime
 from .Entity import Entity
 from .Player import Player
 from .Tools import Tools
@@ -61,7 +61,7 @@ class Observer(object):
             fixedETA = (distance / projectileSpeed) * 1000
             data['eta'] = fixedETA
 
-        self.projectiles[data['pid']] = { **data, 'date': datetime.datetime.now()}
+        self.projectiles[data['pid']] = { **data, 'date': datetime.utcnow().timestamp()}
         return
 
     def deathHandler(self, data):
@@ -90,7 +90,7 @@ class Observer(object):
 
     def gameEventHandler(self, data):
         if (self.G.get('monsters', {}).get(data['name'], False)):
-            monsterData = { 'hp': self.G['monsters'][data['name']]['hp'], 'lastSeen': datetime.datetime.now(), 'level': 1, 'map': data['map'], 'x': data['x'], 'y': data['y'] }
+            monsterData = { 'hp': self.G['monsters'][data['name']]['hp'], 'lastSeen': datetime.utcnow().timestamp(), 'level': 1, 'map': data['map'], 'x': data['x'], 'y': data['y'] }
             self.S[data['name']] = {**monsterData, 'live': True, 'max_hp': monsterData['hp']}
         #TODO: Add database methods
         return
@@ -131,7 +131,7 @@ class Observer(object):
     def pingAckHandler(self, data):
         ping = self.pingMap.get(data['id'], None)
         if ping:
-            time = (datetime.datetime.now() - ping['time']).total_seconds()
+            time = (datetime.utcnow().timestamp() - ping['time'])
             self.pings[self.pingIndex] = time
             self.pingIndex += 1
             self.pingIndex = self.pingIndex % Constants.MAX_PINGS
@@ -203,11 +203,11 @@ class Observer(object):
 
     def parseEntities(self, data):
         if data['type'] == 'all':
-            self.lastAllEntities = datetime.datetime.now()
+            self.lastAllEntities = datetime.utcnow().timestamp()
             
             self.entities.clear()
             self.players.clear()
-            self.lastPositionUpdate = datetime.datetime.now()
+            self.lastPositionUpdate = datetime.utcnow().timestamp()
         else:
             self.updatePositions()
         visibleIDs = []
@@ -244,10 +244,9 @@ class Observer(object):
         return
 
     def updatePositions(self):
-        if getattr(self, 'lastPositionUpdate'):
-            msSinceLastUpdate = (datetime.datetime.now() - self.lastPositionUpdate).total_seconds() * 1000
-            if msSinceLastUpdate == 0:
-                return
+        if getattr(self, 'lastPositionUpdate') != None:
+            msSinceLastUpdate = (datetime.utcnow().timestamp() - self.lastPositionUpdate) * 1000
+            if msSinceLastUpdate == 0: return
             for entity in self.entities.values():
                 if not getattr(entity, 'moving', False):
                     continue
@@ -305,16 +304,16 @@ class Observer(object):
         for id in toDelete:
             del self.players[id]
         for id in list(self.projectiles):
-            if (datetime.datetime.now() - self.projectiles[id]['date']).total_seconds() > Constants.STALE_PROJECTILE_S:
+            if (datetime.utcnow().timestamp() - self.projectiles[id]['date']) > Constants.STALE_PROJECTILE_S:
                 del self.projectiles[id]
-        self.lastPositionUpdate = datetime.datetime.now()
+        self.lastPositionUpdate = datetime.utcnow().timestamp()
         return
 
     async def sendPing(self, log: bool=True):
         async def pingFn():
             pingID = str(self.pingNum)
             self.pingNum += 1
-            self.pingMap[pingID] = { 'log': log, 'time': datetime.datetime.now() }
+            self.pingMap[pingID] = { 'log': log, 'time': datetime.utcnow().timestamp() }
             pinged = asyncio.get_event_loop().create_future()
             def reject(reason = None):
                 nonlocal pinged

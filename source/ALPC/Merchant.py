@@ -298,7 +298,7 @@ class Merchant(PingCompensatedCharacter):
             self.socket.on('entities', mluckCheck)
             self.socket.on('eval', cooldownCheck)
             await self.socket.emit('skill', { 'id': target, 'name': 'mluck' })
-            self.nextSkill['mluck'] = datetime.now() + self.G['skills']['mluck']['cooldown']
+            self.nextSkill['mluck'] = datetime.utcnow().timestamp() + (self.G['skills']['mluck']['cooldown'] / 1000)
             while not mlucked.done():
                 await asyncio.sleep(Constants.SLEEP)
             return mlucked.result()

@@ -30,7 +30,7 @@ class Character(Observer):
         self.bank = {'gold': 0}
         self.achievements = {}
         self.timeouts = {}
-        self.lastSmartMove = datetime.now()
+        self.lastSmartMove = datetime.utcnow().timestamp()
         self.smartMoving = None
         super().__init__(serverData, g, log=log)
         return
@@ -45,10 +45,10 @@ class Character(Observer):
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S)
             return
 
-        if (hasattr(self, 'lastAllEntities')) and (((datetime.now() - self.lastAllEntities).total_seconds()) > Constants.STALE_MONSTER_S):
+        if (hasattr(self, 'lastAllEntities')) and ((datetime.utcnow().timestamp() - self.lastAllEntities) > Constants.STALE_MONSTER_S):
             await self.requestEntitiesData()
 
-        sSinceLastUpdate = ((datetime.now() - self.lastPositionUpdate).total_seconds())
+        sSinceLastUpdate = (datetime.utcnow().timestamp() - self.lastPositionUpdate)
         if sSinceLastUpdate > Constants.UPDATE_POSITIONS_EVERY_S:
             self.updatePositions()
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S)
@@ -112,15 +112,14 @@ class Character(Observer):
             if skillReg.group(2):
                 cooldown = float(skillReg.group(2))
             if cooldown is not None:
-                delta = timedelta(milliseconds=int(math.ceil(cooldown)))
-                next = datetime.now() + delta
+                next = datetime.utcnow().timestamp() + cooldown
                 self.setNextSkill(skill, next)
             return
         
         potReg = re.search("^pot_timeout\s*\(\s*(\d*\.?\d+)\s*\)", data['code'])
         if potReg is not None:
             cooldown = float(potReg.group(1))
-            next = datetime.now() + math.ceil(cooldown)
+            next = datetime.utcnow().timestamp() + cooldown
             self.setNextSkill('regen_hp', next)
             self.setNextSkill('regen_mp', next)
             self.setNextSkill('use_hp', next)
@@ -144,7 +143,7 @@ class Character(Observer):
                 skill = data.get('skill', data.get('place', None))
                 if skill is not None:
                     cooldown = data['ms']
-                    self.setNextSkill(skill, datetime.now() + math.ceil(cooldown))
+                    self.setNextSkill(skill, datetime.utcnow().timestamp() + cooldown)
             elif data['response'] == 'defeated_by_a_monster':
                 pass # we died lol
             elif data['response'] == 'ex_condition':
@@ -152,7 +151,7 @@ class Character(Observer):
             elif data['response'] == 'skill_success':
                 cooldown = self.G['skills'][data['name']]['cooldown']
                 if cooldown is not None:
-                    self.setNextSkill(data['name'], datetime.now() + cooldown)
+                    self.setNextSkill(data['name'], datetime.utcnow().timestamp() + cooldown)
         elif isinstance(data, str):
             if data == 'resolve_skill':
                 pass # ignore. We resolve our skills a different way than the vanilla client
@@ -183,7 +182,7 @@ class Character(Observer):
 
     def updatePositions(self) -> None:
         if getattr(self, 'lastPositionUpdate'):
-            msSinceLastUpdate = (datetime.now() - self.lastPositionUpdate).total_seconds() * 1000
+            msSinceLastUpdate = (datetime.utcnow().timestamp() - self.lastPositionUpdate) * 1000
             if msSinceLastUpdate == 0:
                 return
 
@@ -2607,7 +2606,7 @@ class Character(Observer):
             except Exception as e:
                 self.smartMoving = None
                 raise e
-            started = datetime.now()
+            started = datetime.utcnow().timestamp()
             self.lastSmartMove = started
             numAttempts = 0
             i = 0
@@ -2777,7 +2776,7 @@ class Character(Observer):
             if not self.ready:
                 raise Exception("We aren't ready yet [stopSmartMove].")
             self.smartMoving = None
-            self.lastSmartMove = datetime.now()
+            self.lastSmartMove = datetime.utcnow().timestamp()
             if Tools.hasKey(self.c, 'town'):
                 await self.stopWarpToTown()
             return await self.move(self.x, self.y)
@@ -3351,7 +3350,7 @@ class Character(Observer):
             await self.socket.emit('skill', { 'id': id, 'name': 'zapperzap' })
             while not zapped.done():
                 await asyncio.sleep(Constants.SLEEP)
-            self.nextSkill['zapperzap'] = datetime.now() + timedelta(milliseconds=self.G['skills']['zapperzap']['cooldown'])
+            self.nextSkill['zapperzap'] = datetime.utcnow().timestamp() + (self.G['skills']['zapperzap']['cooldown'] / 1000)
             return zapped.result()
         return await Tools.tryExcept(zapFn)
 
@@ -3394,7 +3393,7 @@ class Character(Observer):
         if nextSkill == None:
             return 0
 
-        cooldown = (nextSkill.get(skill, datetime.now()) - datetime.now()).total_seconds()
+        cooldown = nextSkill.get(skill, datetime.utcnow().timestamp()) - datetime.utcnow().timestamp()
         if cooldown <= 0: return 0
         return cooldown
     
