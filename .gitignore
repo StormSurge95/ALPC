@@ -22,6 +22,7 @@ G_*.json
 pyproject.toml
 MANIFEST.in
 setup.cfg
+Test.py
 
 # Build results
 [Dd]ebug/
