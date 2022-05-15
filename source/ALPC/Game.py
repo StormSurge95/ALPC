@@ -1,3 +1,4 @@
+from datetime import datetime
 from pprint import pprint
 import aiohttp
 import ujson
@@ -5,14 +6,15 @@ import re
 import logging
 import logging.config
 import sys
+from .database import Database
 from .Observer import Observer
 from .Mage import Mage
 from .Merchant import Merchant
 from .Paladin import Paladin
 from .Priest import Priest
-# from .Ranger import Ranger
-# from .Rogue import Rogue
-# from .Warrior import Warrior
+from .Ranger import Ranger
+from .Rogue import Rogue
+from .Warrior import Warrior
 from .PingCompensatedCharacter import PingCompensatedCharacter
 
 logger = logging.getLogger(__name__)
@@ -98,7 +100,66 @@ class Game:
 
     @staticmethod
     async def getMerchants(session: aiohttp.ClientSession):
-        pass
+        if not Game.loggedIn:
+            logger.error('You must login first.')
+            raise Exception()
+        merchants = []
+        
+        params = {}
+        params['method'] = 'pull_merchants'
+        async with session.post('http://adventure.land/api/pull_merchants', data=params) as response:
+            data = ujson.loads(await response.text())
+            for datum in data:
+                if datum['type'] == 'merchants':
+                    for char in datum['chars']:
+                        merchants.append(char)
+        
+        if Database.connection != None:
+            informationDate = datetime.utcnow().timestamp() - 300 # assume info is 5 minutes old
+
+            for merchant in merchants:
+                server = merchant['server'].split(' ')
+                Database.connection.ALPC.players.update_one({ 'lastSeen': { '$lt': informationDate }, 'name': merchant['name'] }, {
+                    "$set": { 'lastSeen': informationDate,
+                    'map': merchant['map'],
+                    'serverIdentifier': server[1],
+                    'serverRegion': server[0],
+                    # We have to update all of the trade slots individually so we don't overwrite what they have equipped
+                    'slots.trade1': merchant['slots'].get('trade1'),
+                    'slots.trade2': merchant['slots'].get('trade2'),
+                    'slots.trade3': merchant['slots'].get('trade3'),
+                    'slots.trade4': merchant['slots'].get('trade4'),
+                    'slots.trade5': merchant['slots'].get('trade5'),
+                    'slots.trade6': merchant['slots'].get('trade6'),
+                    'slots.trade7': merchant['slots'].get('trade7'),
+                    'slots.trade8': merchant['slots'].get('trade8'),
+                    'slots.trade9': merchant['slots'].get('trade9'),
+                    'slots.trade10': merchant['slots'].get('trade10'),
+                    'slots.trade11': merchant['slots'].get('trade11'),
+                    'slots.trade12': merchant['slots'].get('trade12'),
+                    'slots.trade13': merchant['slots'].get('trade13'),
+                    'slots.trade14': merchant['slots'].get('trade14'),
+                    'slots.trade15': merchant['slots'].get('trade15'),
+                    'slots.trade16': merchant['slots'].get('trade16'),
+                    'slots.trade17': merchant['slots'].get('trade17'),
+                    'slots.trade18': merchant['slots'].get('trade18'),
+                    'slots.trade19': merchant['slots'].get('trade19'),
+                    'slots.trade20': merchant['slots'].get('trade20'),
+                    'slots.trade21': merchant['slots'].get('trade21'),
+                    'slots.trade22': merchant['slots'].get('trade22'),
+                    'slots.trade23': merchant['slots'].get('trade23'),
+                    'slots.trade24': merchant['slots'].get('trade24'),
+                    'slots.trade25': merchant['slots'].get('trade25'),
+                    'slots.trade26': merchant['slots'].get('trade26'),
+                    'slots.trade27': merchant['slots'].get('trade27'),
+                    'slots.trade28': merchant['slots'].get('trade28'),
+                    'slots.trade29': merchant['slots'].get('trade29'),
+                    'slots.trade30': merchant['slots'].get('trade30'),
+                    'x': merchant['x'],
+                    'y': merchant['y'] }
+                }, True)
+        
+        return merchants
 
     @staticmethod
     async def getVersion(session: aiohttp.ClientSession):
@@ -124,9 +185,9 @@ class Game:
             print(data)
 
     @staticmethod
-    async def login(session: aiohttp.ClientSession, email: str, password: str, mongo: str = ''):
-        #if bool(mongo) and (not Database.connection):
-            #await Database.connect(mongo)
+    async def login(session: aiohttp.ClientSession, email: str, password: str, mongo: str = None):
+        if mongo != None and (Database.connection == None):
+            Database.connect(mongo)
         if not Game.loggedIn:
             logger.debug('Logging in...')
             params = {}
@@ -161,8 +222,9 @@ class Game:
         data = ujson.loads(fileData)
 
         try:
-            await Game.login(session, data['email'], data['password'])
-        except Exception:
+            await Game.login(session, data['email'], data['password'], data.get('mongo'))
+        except Exception as e:
+            logger.error(e)
             return False
         return True
 
@@ -312,7 +374,7 @@ class Game:
         if not bool(Game.characters):
             await Game.updateServersAndCharacters(session)
         if not bool(Game.G):
-            await Game.getGData()
+            await Game.getGData(session)
 
         observer = Observer(Game.servers[region][id], Game.G)
         await observer.connect(True)

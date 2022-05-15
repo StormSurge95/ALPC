@@ -25,15 +25,16 @@ The PyPI page can be found [here](https://pypi.org/project/ALPC/). In order to i
   
 </details>
 
-* <small>*Note: This package was developed with Python 3.10.4; therefore, I cannot guarantee that it will work with anything below that. In fact, due to current bugs, I cannot even guarantee that it will work perfectly **with** that.*</small>
+* *Note: This package was developed with Python 3.10.4; therefore, I cannot guarantee that it will work with anything below that. In fact, due to current bugs, I cannot even guarantee that it will work perfectly **with** that.*
 
 ## Usage
 * First: be sure to install the package from PyPI using pip.
 * Second: create a `credentials.json` file like so:
 ```json
 {
-    'email': 'youremail@address.com',
-    'password': 'yourpassword'
+    "email": "your_email@address.com",
+    "password": "your_password",
+    "mongo": "optional_mongo_uri"
 }
 ```
 * Third: create a python file like so:
@@ -91,8 +92,13 @@ Returning to main...
 Disconnecting...
 ```
 
+## Version History
+0.1.0: basic functionality; initial release
+0.2.0: added all of the individual character classes
+0.3.0: added database functionality
+
 ## Final Notes
-* AS STATED, THIS PACKAGE IS STILL A WORK IN PROGRESS. If you have ANY issues at all or any suggestions or come accross any bugs, feel free to either submit them to the issues tab or submit your info to the existing issue if your bug is already there.
+* AS STATED, THIS PACKAGE IS STILL A WORK IN PROGRESS. If you have ANY issues at all or any suggestions or come accross any bugs, feel free to either submit them to the issues tab or submit your info to the existing issue if your bug/issue/suggestion is already there.
 * The two current largest bugs I have are as follows:
   1. The fact that Pathfinder takes FAR too long to prepare.
   2. For some reason, my modifications to the socketio package I'm using seem to interfere with its ability to disconnect properly.

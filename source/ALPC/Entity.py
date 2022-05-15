@@ -1,3 +1,4 @@
+from pprint import pprint
 from .Tools import Tools
 import logging
 import logging.config
@@ -10,16 +11,57 @@ class Entity:
         self.max_mp = G['monsters'][data['type']]['mp']
         self.map = map
         self.inst = instance
-        for gKey in G['monsters'][data['type']].keys():
+        self.moving = False
+        self.cooperative = False
+        
+        self.apiercing = 0
+        self.armor = 0
+        self.avoidance = 0
+        self.blast = 0
+        self.breaks = 0
+        self.crit = 0
+        self.critdamage = 0
+        self.evasion = 0
+        self.lifesteal = 0
+        self.mcourage = 0
+        self.reflection = 0
+        self.resistance = 0
+        self.rpiercing = 0
+
+        setattr(self, '1hp', False)
+        self.aa = 0
+        self.achievements = []
+        self.cute = False
+        self.drop_on_hit = False
+        self.escapist = False
+        setattr(self, 'global', False)
+        self.goldsteal = 0
+        self.humanoid = False
+        self.passive = False
+        self.peaceful = False
+        self.poisonous = False
+        self.prefix = ""
+        self.roam = False
+        self.spawns = []
+        self.special = False
+        self.stationary = False
+        self.supporter = False
+        self.trap = False
+        self.unlist = False
+
+        self.level = 1
+        self.s = {}
+
+        for gKey in G['monsters'][data['type']]:
             setattr(self, gKey, G['monsters'][data['type']][gKey])
 
         self.updateData(data)
 
     def updateData(self, data: dict):
         if (hasattr(self, 'id') and getattr(self, 'id') != data['id']):
-            print('The entity\'s ID does not match')
+            print("The entity's ID does not match")
             raise Exception()
-        for key in data.keys():
+        for key in data:
             setattr(self, key, data[key])
 
     def calculateDamageRange(self, defender) -> list:

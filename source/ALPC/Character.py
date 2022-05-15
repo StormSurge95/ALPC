@@ -1,12 +1,15 @@
 from functools import reduce
 import logging
+from pprint import pprint
+import pymongo
+from .database import Database
 from .Observer import Observer
 from .Player import Player
 from .Entity import Entity
 from .Tools import Tools
 from .Constants import Constants
 from .Pathfinder import Pathfinder
-from datetime import datetime, timedelta
+from datetime import datetime
 import asyncio
 import re
 import sys
@@ -27,13 +30,17 @@ class Character(Observer):
         self.partyData = None
         self.nextSkill = {}
         self.chests = {}
-        self.bank = {'gold': 0}
+        self.user = {'gold': 0}
         self.achievements = {}
         self.timeouts = {}
         self.lastSmartMove = datetime.utcnow().timestamp()
         self.smartMoving = None
         super().__init__(serverData, g, log=log)
         return
+
+    @property
+    def bank(self):
+        return self.user
 
     async def updateLoop(self) -> None:
         if (not bool(self.socket)) or (not self.socket.connected) or (not self.ready):
@@ -73,7 +80,17 @@ class Character(Observer):
             elif datum == 'tp':
                 pass
             elif datum == 'user':
-                self.bank = data['user']
+                self.user = data['user']
+
+                if Database.connection != None:
+                    updateData = {
+                        'lastUpdated': datetime.utcnow().timestamp(),
+                        'owner': self.owner,
+                        **data['user']
+                    }
+                    Database.connection.ALPC.banks.update_one({ 'owner': self.owner }, { "$set": updateData }, upsert=True)
+                
+                pprint(self.bank)
             else:
                 setattr(self, datum, data[datum])
         self.name = data['id']
@@ -81,6 +98,26 @@ class Character(Observer):
             self.partyData = None
         if (not hasattr(self, 'damage_type')) and hasattr(self, 'ctype'):
             self.damage_type = self.G['classes'][self.ctype]['damage_type']
+        if Database.connection != None:
+            key = f"{self.serverData['name']}{self.serverData['region']}{self.id}"
+            nextUpdate = Database.nextUpdate.get(key)
+            if nextUpdate == None or datetime.utcnow().timestamp() >= nextUpdate:
+                updateData = {
+                    'items': self.items,
+                    'lastSeen': datetime.utcnow().timestamp(),
+                    'map': self.map,
+                    'name': self.id,
+                    's': self.s,
+                    'serverIdentifier': self.serverData['name'],
+                    'serverRegion': self.serverData['region'],
+                    'slots': self.slots,
+                    'type': self.ctype,
+                    'x': self.x,
+                    'y': self.y
+                }
+                if hasattr(self, 'owner'): updateData['owner'] = self.owner
+                Database.connection.ALPC.players.update_one({ 'name': self.id }, { "$set": updateData }, True)
+                Database.nextUpdate[key] = datetime.utcnow().timestamp() + Constants.MONGO_UPDATE_S
         return
 
     def parseEntities(self, data) -> None:
@@ -144,8 +181,18 @@ class Character(Observer):
                 if skill is not None:
                     cooldown = data['ms']
                     self.setNextSkill(skill, datetime.utcnow().timestamp() + cooldown)
-            elif data['response'] == 'defeated_by_a_monster':
-                pass # we died lol
+            elif Database.connection != None and data['response'] == 'defeated_by_a_monster':
+                # we died lol
+                Database.connection.ALPC.deaths.insert_one({
+                    'cause': data['monster'],
+                    'map': self.map,
+                    'name': self.id,
+                    'serverIdentifier': self.server['name'],
+                    'serverRegion': self.server['region'],
+                    'time': datetime.utcnow().timestamp(),
+                    'x': self.x,
+                    'y': self.y
+                })
             elif data['response'] == 'ex_condition':
                 del self.s[data['name']]
             elif data['response'] == 'skill_success':
@@ -257,12 +304,50 @@ class Character(Observer):
             print(str(data))
         return
 
+    def gameLogHandler(self, data):
+        if not isinstance(data, dict): return
+        match = re.search('^Slain by (.+)$', data['message'])
+        if match != None:
+            Database.connection.ALPC.deaths.insert_one({
+                'cause': match[1],
+                'map': self.map,
+                'name': self.id,
+                'serverIdentifier': self.server['name'],
+                'serverRegion': self.server['region'],
+                'time': datetime.utcnow().timestamp(),
+                'x': self.x,
+                'y': self.y
+            })
+
     def gameResponseHandler(self, data) -> None:
         self.parseGameResponse(data)
         return
 
-    def partyUpdateHandler(self, data) -> None:
+    def partyUpdateHandler(self, data = None) -> None:
         self.partyData = data
+
+        if data != None and Database.connection != None:
+            playerUpdates = []
+            for id in data['party']:
+                cData = data['party'][id]
+                updateData = {
+                    'in': cData['in'],
+                    'lastSeen': datetime.utcnow().timestamp(),
+                    'map': cData['map'],
+                    'name': id,
+                    'serverIdentifier': self.serverData['name'],
+                    'serverRegion': self.serverData['region'],
+                    'type': cData['type'],
+                    'x': cData['x'],
+                    'y': cData['y']
+                }
+                playerUpdates.append(pymongo.UpdateOne(
+                    filter={ 'name': id },
+                    update={ "$set": updateData },
+                    upsert=True
+                ))
+            if len(playerUpdates) > 0:
+                Database.connection.ALPC.players.bulk_write(playerUpdates)
         return
 
     def playerHandler(self, data) -> None:
@@ -273,6 +358,22 @@ class Character(Observer):
         self.parseQData(data)
         return
 
+    def trackerHandler(self, data):
+        for monsterName in data['max']['monsters']:
+            characterKills = data['monsters'].get(monsterName, 0)
+            maxData = data['max']['monsters'][monsterName]
+
+            if characterKills > maxData[0]:
+                maxData[0] = characterKills
+                maxData[1] = self.id
+        
+        Database.connection.ALPC.achievements.insert_one({
+            'date': datetime.utcnow().timestamp(),
+            'max': data['max'],
+            'monsters': data['monsters'],
+            'name': self.id
+        })
+
     def upgradeHandler(self, data) -> None:
         if data['type'] == 'compound' and getattr(self, 'q', {}).get('compound', False):
             del self.q['compound']
@@ -281,7 +382,6 @@ class Character(Observer):
         return
 
     async def welcomeHandler(self, data) -> None:
-        self.server = data
         await self.socket.emit('loaded', {'height': 1080, 'scale': 2, 'success': 1, 'width': 1920})
         await self.socket.emit('auth', {'auth': self.userAuth, 'character': self.characterID, 'height': 1080, 'no_graphics': 'True', 'no_html': '1', 'passphrase': '', 'scale': 2, 'user': self.owner, 'width': 1920})
         return
@@ -304,6 +404,9 @@ class Character(Observer):
         self.socket.on('q_data', self.qDataHandler)
         self.socket.on('upgrade', self.upgradeHandler)
         self.socket.on('welcome', self.welcomeHandler)
+        if Database.connection != None:
+            self.socket.on('game_log', self.gameLogHandler)
+            self.socket.on('tracker', self.trackerHandler)
 
         async def connectedFn():
             connected = asyncio.get_event_loop().create_future()

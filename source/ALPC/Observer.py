@@ -1,10 +1,16 @@
 import asyncio
+from asyncio.log import logger
+from pprint import pprint
+import re
+import sys
 from . import psSocketIO
+from .database import Database
 from datetime import datetime
 from .Entity import Entity
 from .Player import Player
 from .Tools import Tools
 from .Constants import Constants
+import pymongo
 import math
 
 class Observer(object):
@@ -17,16 +23,17 @@ class Observer(object):
         self.lastAllEntities = 0
         self.lastPositionUpdate = None
         self.entities: dict[str, Entity] = {}
+        self.map = ''
         self.pingIndex = 0
         self.pingMap = {}
         self.pingNum = 1
         self.pings = {}
-        self.players = {}
+        self.players: dict[str, Player] = {}
         self.projectiles = {}
         self.S = {}
         self.server = None
-        self.x = 0
-        self.y = 0
+        self.x: float = 0
+        self.y: float = 0
         if serverData:
             region = serverData['region']
             name = serverData['name']
@@ -39,15 +46,9 @@ class Observer(object):
     @property
     def ping(self):
         if len(self.pings.values()) == 0:
-            return 0
+            return float(0)
         else:
             return min(self.pings.values())
-
-    def defaultHandler(self, data = None):
-        return
-    
-    def anyHandler(self, event, data = None):
-        print(f"Event: {event}\nData: {data}")
 
     def actionHandler(self, data):
         if data.get('instant', False):
@@ -74,7 +75,40 @@ class Observer(object):
         else:
             self.deleteEntity(data['id'])
         self.updatePositions()
-        #TODO: Add database functions
+
+        if Database.connection == None or data['reason'] == 'disconnect' or data['reason'] == 'invis': return
+        if data.get('effect') != None and (data.get('effect') == 'blink' or data.get('effect') == 'magiport') and data.get('to') != None and self.G['maps'].get(data['to']) != None and data.get('s') != None and not data['id'].isnumeric():
+            updateData = {
+                'lastSeen': datetime.utcnow().timestamp(),
+                'map': data['to'],
+                'serverIdentifier': self.serverData['name'],
+                'serverRegion': self.serverData['region'],
+                'x': data['s'][0],
+                'y': data['s'][1]
+            }
+            key = f"{self.serverData['name']}{self.serverData['region']}{data['id']}"
+            nextUpdate = Database.nextUpdate.get(key)
+            if nextUpdate == None or datetime.utcnow().timestamp() >= nextUpdate:
+                Database.connection.ALPC.players.update_one({ 'name': data['id'] },  { "$set": updateData }, True)
+                Database.nextUpdate[key] = datetime.utcnow().timestamp() + Constants.MONGO_UPDATE_S
+        elif data.get('to') != None and data.get('effect') == 1:
+            s = 0
+            if data.get('s') != None: s = data['s']
+            spawnLocation = self.G['maps'].get(data['to'], {}).get('spawns', [None])[s]
+            if spawnLocation == None: return
+            updateData = {
+                'lastSeen': datetime.utcnow().timestamp(),
+                'map': data['to'],
+                'serverIdentifier': self.serverData['name'],
+                'serverRegion': self.serverData['region'],
+                'x': spawnLocation[0],
+                'y': spawnLocation[1]
+            }
+            key = f"{self.serverData['name']}{self.serverData['region']}{data['id']}"
+            nextUpdate = Database.nextUpdate.get(key)
+            if nextUpdate == None or datetime.utcnow().timestamp() >= nextUpdate:
+                Database.connection.ALPC.players.update_one({ 'name': data['id'] }, { "$set": updateData }, True)
+                Database.nextUpdate[key] = datetime.utcnow().timestamp() + Constants.MONGO_UPDATE_S
         return
 
     def disconnectHandler(self):
@@ -92,7 +126,8 @@ class Observer(object):
         if (self.G.get('monsters', {}).get(data['name'], False)):
             monsterData = { 'hp': self.G['monsters'][data['name']]['hp'], 'lastSeen': datetime.utcnow().timestamp(), 'level': 1, 'map': data['map'], 'x': data['x'], 'y': data['y'] }
             self.S[data['name']] = {**monsterData, 'live': True, 'max_hp': monsterData['hp']}
-        #TODO: Add database methods
+        if Database.connection != None:
+            Database.connection.ALPC.entities.update_one({ 'serverIdentifier': self.serverData['name'], 'serverRegion': self.serverData['region'], 'type': data['name'] }, { "$set": monsterData }, True)
         return
 
     def hitHandler(self, data):
@@ -140,7 +175,96 @@ class Observer(object):
             del self.pingMap[data['id']]
         return
 
-    #TODO: server_info event handler
+    def serverInfoHandler(self, data: dict):
+        databaseEntityUpdates = []
+        databaseRespawnUpdates = []
+        databaseDeletes = set()
+        now = datetime.utcnow().timestamp()
+
+        if Database.connection != None:
+            for type in Constants.SERVER_INFO_MONSTERS:
+                if data.get(type) == None or data[type]['live'] == False: databaseDeletes.add(type)
+            
+            for mtype in data:
+                mData: dict = data[mtype]
+                if not isinstance(mData, dict): continue # event info, not monster info
+                if mData.get('live') != True:
+                    databaseDeletes.add(mtype)
+                    nextSpawn = datetime(mData['spawn']).timestamp()
+                    databaseRespawnUpdates.append(pymongo.UpdateOne(
+                        filter={
+                            'serverIdentifier': self.serverData['name'],
+                            'serverRegion': self.serverData['region'],
+                            'type': mtype
+                        },
+                        update={
+                            "$set": { 'estimatedRespawn': nextSpawn }
+                        },
+                        upsert=True
+                    ))
+                    continue
+                if mData.get('x') == None or mData.get('y') == None: continue # No location data
+
+                if mData.get('hp') == None: mData['hp'] = self.G['monsters'][mtype]['hp']
+                if mData.get('max_hp') == None: mData['max_hp'] = self.G['monsters'][mtype]['hp']
+
+                data[mtype] = mData
+
+                if mtype in Constants.SPECIAL_MONSTERS:
+                    databaseEntityUpdates.append(pymongo.UpdateOne(
+                        filter={
+                            'serverIdentifier': self.serverData['name'],
+                            'serverRegion': self.serverData['region'],
+                            'type': mtype
+                        },
+                        update={ "$set": {
+                            'hp': mData.get('hp'),
+                            'lastSeen': now,
+                            'map': mData.get('map'),
+                            'target': mData.get('target'),
+                            'x': mData.get('x'),
+                            'y': mData.get('y')
+                        } },
+                        upsert=True
+                    ))
+                    databaseRespawnUpdates.append(pymongo.DeleteOne(
+                        filter= {
+                            'serverIdentifier': self.serverData['name'],
+                            'serverRegion': self.serverData['region'],
+                            'type': mtype
+                        }
+                    ))
+            
+            for type in Constants.MONSTER_RESPAWN_TIMES:
+                if data.get(type) != None: continue # It's still alive
+                if self.S.get(type) == None: continue # It wasn't alive before
+
+                # This special monster just died
+                nextSpawn = datetime.utcnow().timestamp() + Constants.MONSTER_RESPAWN_TIMES[type]
+                databaseRespawnUpdates.append(pymongo.UpdateOne(
+                    filter={
+                        'serverIdentifier': self.serverData['name'],
+                        'serverRegion': self.serverData['region'],
+                        'type': type
+                    },
+                    update={
+                        "$set": { 'estimatedRespawn': nextSpawn }
+                    },
+                    upsert=True
+                ))
+            
+            if len(databaseDeletes) > 0: Database.connection.ALPC.entities.delete_many(
+                filter={
+                    'serverIdentifier': self.serverData['name'],
+                    'serverRegion': self.serverData['region'],
+                    'type': { '$in': [*databaseDeletes] }
+                }
+            )
+            if len(databaseEntityUpdates) > 0: Database.connection.ALPC.entities.bulk_write(databaseEntityUpdates)
+            if len(databaseRespawnUpdates) > 0: Database.connection.ALPC.respawns.bulk_write(databaseRespawnUpdates)
+
+        self.S = data
+        return
 
     def welcomeHandler(self, data):
         self.server = data
@@ -162,7 +286,8 @@ class Observer(object):
         self.socket.on('hit', self.hitHandler)
         self.socket.on('new_map', self.newMapHandler)
         self.socket.on('ping_ack', self.pingAckHandler)
-        self.socket.on('welcome', self.welcomeHandler, )
+        self.socket.on('server_info', self.serverInfoHandler)
+        self.socket.on('welcome', self.welcomeHandler)
         
         if start:
             async def connectedFn():
@@ -173,29 +298,29 @@ class Observer(object):
                     else:
                         await self.socket.emit('loaded', {'height':1080, 'scale':2, 'success':1, 'width':1920})
                         connected.set_result(True)
-                    self.welcomeHandler(data)
                 def reject(reason):
                     if not connected.done():
                         connected.set_exception(Exception(reason))
                 self.socket.on('welcome', welcomeFn)
                 Tools.setTimeout(reject, Constants.CONNECT_TIMEOUT_S, f'Failed to start within {Constants.CONNECT_TIMEOUT_S}s.')
                 while not connected.done():
-                    await asyncio.sleep(0.25)
+                    await asyncio.sleep(Constants.SLEEP)
                 return connected.result()
-            try:
-                await connectedFn()
-            except Exception as e:
-                print('Error:', e)
-                return
+            return await Tools.tryExcept(connectedFn)
         return
 
     def deleteEntity(self, id: str, death: bool=False) -> bool:
-        entity = self.entities.get(id, None)
+        entity: Entity = self.entities.get(id, None)
         if entity:
             if self.S.get(entity.type, None) and death:
                 del self.S[entity.type]
 
-            #TODO: database stuff
+            if Database.connection != None and entity.type in Constants.SPECIAL_MONSTERS:
+                key = f"{self.serverData['name']}{self.serverData['region']}{entity.id}"
+                nextUpdate: float = Database.nextUpdate.get(key)
+                if death and nextUpdate != sys.maxsize:
+                    Database.connection.ALPC.entities.delete_one({ 'name': id, 'serverIdentifier': self.serverData['name'], 'serverRegion': self.serverData['region'] })
+                    Database.nextUpdate[key] = nextUpdate
 
             del self.entities[id]
             return True
@@ -216,23 +341,150 @@ class Observer(object):
         playerUpdates = []
         for monster in data['monsters']:
             e = None
-            if not self.entities.get(monster['id'], None):
+            if self.entities.get(monster['id']) == None:
                 e = Entity(monster, data['map'], data['in'], self.G)
                 self.entities[monster['id']] = e
             else:
                 e = self.entities[monster['id']]
                 e.updateData(monster)
             visibleIDs.append(e.id)
-        #TODO: database stuff
+        
+            if Database.connection != None:
+                if e.type in Constants.SPECIAL_MONSTERS:
+                    key = f"{self.serverData['name']}{self.serverData['region']}{e.id}"
+                    nextUpdate = Database.nextUpdate.get(key)
+                    if nextUpdate == None or datetime.utcnow().timestamp() >= nextUpdate:
+                        updateData = {
+                            'hp': e.hp,
+                            'in': e.inst,
+                            'lastSeen': datetime.utcnow().timestamp(),
+                            'level': e.level,
+                            'map': e.map,
+                            'name': e.id,
+                            'x': e.x,
+                            'y': e.y
+                        }
+                        if hasattr(e, 'target'): updateData['target'] = e.target
+                        if e.type in Constants.ONE_SPAWN_MONSTERS:
+                            # Don't include id in filter, so it overwrites last one
+                            entityUpdates.append(pymongo.UpdateOne(
+                                filter={
+                                    'serverIdentifier': self.serverData['name'],
+                                    'serverRegion': self.serverData['region'],
+                                    'type': e.type
+                                },
+                                update={ "$set": updateData },
+                                upsert=True
+                            ))
+                        else:
+                            # Include the id in the filter
+                            entityUpdates.append(pymongo.UpdateOne(
+                                filter={
+                                    'name': e.id,
+                                    'serverIdentifier': self.serverData['name'],
+                                    'serverRegion': self.serverData['region'],
+                                    'type': e.type 
+                                },
+                                update={ "$set": updateData },
+                                upsert=True
+                            ))
+                        Database.nextUpdate[key] = datetime.utcnow().timestamp() + Constants.MONGO_UPDATE_S
         for player in data['players']:
-            p = None
+            p: Player = None
             if not self.players.get(player['id'], None):
                 p = Player(player, data['map'], data['in'], self.G)
                 self.players[player['id']] = p
             else:
                 p = self.players[player['id']]
                 p.updateData(player)
-        #TODO: database stuff
+        
+            if Database.connection != None:
+                key = f"{self.serverData['name']}{self.serverData['region']}{p.id}"
+                nextUpdate = Database.nextUpdate.get(key)
+                if nextUpdate == None or datetime.utcnow().timestamp() >= nextUpdate:
+                    if p.isNPC():
+                        npcUpdates.append(pymongo.UpdateOne(
+                            filter={
+                                'name': p.id,
+                                'serverIdentifier': self.serverData['name'],
+                                'serverRegion': self.serverData['region']
+                            },
+                            update={ "$set": {
+                                'lastSeen': datetime.utcnow().timestamp(),
+                                'map': p.map,
+                                'x': p.x,
+                                'y': p.y
+                            } },
+                            upsert=True
+                        ))
+                    else:
+                        updateData = {
+                            'in': p.inst,
+                            'lastSeen': datetime.utcnow().timestamp(),
+                            'map': p.map,
+                            'rip': p.rip,
+                            's': p.s,
+                            'serverIdentifier': self.serverData['name'],
+                            'serverRegion': self.serverData['region'],
+                            'slots': p.slots,
+                            'type': p.ctype,
+                            'x': p.x,
+                            'y': p.y
+                        }
+                        if hasattr(p, 'owner'): updateData['owner'] = p.owner
+                        playerUpdates.append(pymongo.UpdateOne(
+                            filter={ 'name': p.id },
+                            update={ "$set": updateData },
+                            upsert=True
+                        ))
+                    Database.nextUpdate[key] = datetime.utcnow().timestamp() + Constants.MONGO_UPDATE_S
+        if Database.connection != None:
+            if len(entityUpdates) > 0: Database.connection.ALPC.entities.bulk_write(entityUpdates)
+            if len(npcUpdates) > 0: Database.connection.ALPC.npcs.bulk_write(npcUpdates)
+            if len(playerUpdates) > 0: Database.connection.ALPC.players.bulk_write(playerUpdates)
+
+            if data['type'] == 'all':
+                results = Database.connection.ALPC.entities.aggregate([
+                    {
+                        "$match": {
+                            'map': self.map,
+                            'name': { "$nin": visibleIDs },
+                            'serverIdentifier': self.serverData['name'],
+                            'serverRegion': self.serverData['region']
+                        }
+                    },
+                    {
+                        "$project": {
+                            'distance': {
+                                "$sqrt": {
+                                    "$add": [
+                                        { "$pow": [{ "$subtract": [self.y, "$y"] }, 2] },
+                                        { "$pow": [{ "$subtract": [self.x, "$x"] }, 2] } 
+                                    ]
+                                }
+                            }
+                        }
+                    },
+                    {
+                        "$match": {
+                            'distance': {
+                                "$lt": Constants.MAX_VISIBLE_RANGE / 2
+                            }
+                        }
+                    }
+                ])
+                try:
+                    ids = []
+                    for doc in results: ids.append(doc['_id'])
+                    if len(ids) > 0: Database.connection.ALPC.entities.delete_many({
+                        '_id': { "$in": ids },
+                        'serverIdentifier': self.serverData['name'],
+                        'serverRegion': self.serverData['region']
+                    })
+                except Exception as e:
+                    logger.exception(e)
+                    logger.debug("results of aggregation:")
+                    logger.debug(results)
         return
 
     def parseNewMap(self, data):
