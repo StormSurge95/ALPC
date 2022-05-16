@@ -63,6 +63,7 @@ class PingCompensatedCharacter(Character):
         for monster in data['monsters']:
             entity = self.entities.get(monster['id'])
             if entity == None or not hasattr(entity, 'moving'): continue
+            if not hasattr(entity, 'speed') or entity.speed == None: continue
             if not hasattr(entity, 'going_x') or not hasattr(entity, 'going_y'): continue
             distanceTravelled = entity.speed * pingCompensation
             angle = math.atan2(entity.going_y - entity.y, entity.going_x - entity.x)
@@ -84,6 +85,8 @@ class PingCompensatedCharacter(Character):
         for player in data['players']:
             entity = self.players.get(player['id'])
             if entity == None or not hasattr(entity, 'moving'): continue
+            if not hasattr(entity, 'speed') or entity.speed == None: continue
+            if not hasattr(entity, 'going_x') or not hasattr(entity, 'going_y'): continue
             distanceTravelled = entity.speed * pingCompensation
             angle = math.atan2(entity.going_y - entity.y, entity.going_x - entity.x)
             distanceToGoal = Tools.distance({ 'x': entity.x, 'y': entity.y }, { 'x': entity.going_x, 'y': entity.going_y })

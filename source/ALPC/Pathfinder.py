@@ -11,8 +11,6 @@ UNKNOWN = 1
 UNWALKABLE = 2
 WALKABLE = 3
 
-
-
 class Pathfinder:
     G = None
     FIRST_MAP = 'main'
@@ -200,7 +198,8 @@ class Pathfinder:
         current = path[0]
         for i in range(1, len(path)):
             next = path[i]
-            cost += Pathfinder.computeLinkCost(current, next, next, avoidTownWarps=avoidTownWarps, costs=costs)
+            link = { 'data': { **next } }
+            cost += Pathfinder.computeLinkCost(current, next, link, avoidTownWarps=avoidTownWarps, costs=costs)
             current = next
         return cost
     
@@ -220,6 +219,8 @@ class Pathfinder:
         width = maxX - minX
         height = maxY - minY
 
+        # gridStart = datetime.utcnow().timestamp()
+        # print("  Starting grid creation...")
         grid = [UNKNOWN] * (height * width)
         for yLine in gGeo['y_lines']:
             lowerY = max([0, yLine[0] - minY - base['vn']])
@@ -274,7 +275,8 @@ class Pathfinder:
                     elif spanBelow and y < (height - 1) and grid[(y + 1) * width + x] != UNKNOWN:
                         spanBelow = 0
                     x += 1
-        
+        # print(f"  grid size: {len(grid)}")
+        # print(f"  grid completion: {(datetime.utcnow().timestamp() - gridStart)}\n")
         Pathfinder.grids[map] = grid
         Pathfinder.updateGraph(grid, map)
         return grid
@@ -297,9 +299,9 @@ class Pathfinder:
         linkAttr = {}       # dictionary containing list of attributes for each link
 
         # add nodes at corners
-        cornersStart = datetime.now()
-        Pathfinder.logger.debug("  Adding corners...")
-        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
+        # cornersStart = datetime.utcnow().timestamp()
+        # print("  Adding corners...")
+        # print(f"  # nodes: {len(walkableNodes)}")
         for y in range(1, height - 1):
             for x in range(1, width):
                 # for each walkable x/y position...
@@ -321,43 +323,22 @@ class Pathfinder:
                 mapY = y + minY
 
                 # inside-1
-                if (bottomLeft == UNWALKABLE) and (bottomCenter == UNWALKABLE) and (bottomRight == UNWALKABLE) and (middleLeft == UNWALKABLE) and (upperLeft == UNWALKABLE):
+                if (((bottomLeft == UNWALKABLE) and (bottomCenter == UNWALKABLE) and (bottomRight == UNWALKABLE) and (middleLeft == UNWALKABLE) and (upperLeft == UNWALKABLE))
+                    or ((bottomLeft == UNWALKABLE) and (bottomCenter == UNWALKABLE) and (bottomRight == UNWALKABLE) and (middleRight == UNWALKABLE) and (upperRight == UNWALKABLE))
+                    or ((bottomRight == UNWALKABLE) and (middleRight == UNWALKABLE) and (upperLeft == UNWALKABLE) and (upperCenter == UNWALKABLE) and (upperRight == UNWALKABLE))
+                    or ((bottomLeft == UNWALKABLE) and (middleLeft == UNWALKABLE) and (upperLeft == UNWALKABLE) and (upperCenter == UNWALKABLE) and (upperRight == UNWALKABLE))
+                    or ((bottomLeft == UNWALKABLE) and (bottomCenter == WALKABLE) and (middleLeft == WALKABLE))
+                    or ((bottomCenter == WALKABLE) and (bottomRight == UNWALKABLE) and (middleRight == WALKABLE))
+                    or ((middleRight == WALKABLE) and (upperCenter == WALKABLE) and (upperRight == UNWALKABLE))
+                    or ((middleLeft == WALKABLE) and (upperLeft == UNWALKABLE) and (upperCenter == WALKABLE))):
                     walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
                     points.append([mapX, mapY])
-                # inside-2
-                elif (bottomLeft == UNWALKABLE) and (bottomCenter == UNWALKABLE) and (bottomRight == UNWALKABLE) and (middleRight == UNWALKABLE) and (upperRight == UNWALKABLE):
-                    walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
-                    points.append([mapX, mapY])
-                # inside-3
-                elif (bottomRight == UNWALKABLE) and (middleRight == UNWALKABLE) and (upperLeft == UNWALKABLE) and (upperCenter == UNWALKABLE) and (upperRight == UNWALKABLE):
-                    walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
-                    points.append([mapX, mapY])
-                # inside-4
-                elif (bottomLeft == UNWALKABLE) and (middleLeft == UNWALKABLE) and (upperLeft == UNWALKABLE) and (upperCenter == UNWALKABLE) and (upperRight == UNWALKABLE):
-                    walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
-                    points.append([mapX, mapY])
-                # outside-1 
-                elif (bottomLeft == UNWALKABLE) and (bottomCenter == WALKABLE) and (middleLeft == WALKABLE):
-                    walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
-                    points.append([mapX, mapY])
-                # outside-2
-                elif (bottomCenter == WALKABLE) and (bottomRight == UNWALKABLE) and (middleRight == WALKABLE):
-                    walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
-                    points.append([mapX, mapY])
-                # outside-3
-                elif (middleRight == WALKABLE) and (upperCenter == WALKABLE) and (upperRight == UNWALKABLE):
-                    walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
-                    points.append([mapX, mapY])
-                # outside-4
-                elif (middleLeft == WALKABLE) and (upperLeft == UNWALKABLE) and (upperCenter == WALKABLE):
-                    walkableNodes.append(Pathfinder.addNodeToGraph(map, mapX, mapY))
-                    points.append([mapX, mapY])
-        Pathfinder.logger.debug(f"  corner completion: {(datetime.now() - cornersStart).total_seconds()}\n")
+        # print(f"  corner completion: {(datetime.utcnow().timestamp() - cornersStart)}\n")
         
         # add nodes at transporters (we'll look for close nodes to transporters later)
-        transportersStart = datetime.now()
-        Pathfinder.logger.debug("  Adding transporter nodes...")
-        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
+        # transportersStart = datetime.utcnow().timestamp()
+        # print("  Adding transporter nodes...")
+        # print(f"  # nodes: {len(walkableNodes)}")
         transporters = []
         for npc in gMap['npcs']:
             if npc['id'] != 'transporter':
@@ -379,12 +360,12 @@ class Pathfinder:
                     points.append([x, y])
                     walkableNodes.append(fromNode)
                 angle += math.pi / 32
-        Pathfinder.logger.debug(f"  transporter completion: {(datetime.now() - transportersStart).total_seconds()}\n")
+        # print(f"  transporter completion: {(datetime.utcnow().timestamp() - transportersStart)}\n")
 
         # add nodes at doors (we'll look for close nodes to doors later)
-        doorsStart = datetime.now()
-        Pathfinder.logger.debug("  Adding door nodes...")
-        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
+        # doorsStart = datetime.utcnow().timestamp()
+        # print("  Adding door nodes...")
+        # print(f"  # nodes: {len(walkableNodes)}")
         doors = []
         for door in gMap['doors']:
             #TODO: Figure out how to know if we have access to a locked door
@@ -419,12 +400,12 @@ class Pathfinder:
                         points.append([x, y])
                         walkableNodes.append(fromNode)
                     angle += math.pi / 32
-        Pathfinder.logger.debug(f"  door completion: {(datetime.now() - doorsStart).total_seconds()}\n")
+        # print(f"  door completion: {(datetime.utcnow().timestamp() - doorsStart)}\n")
         
         # Add nodes at spawns
-        spawnsStart = datetime.now()
-        Pathfinder.logger.debug("  Adding spawn nodes...")
-        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
+        # spawnsStart = datetime.utcnow().timestamp()
+        # print("  Adding spawn nodes...")
+        # print(f"  # nodes: {len(walkableNodes)}")
         townNode = Pathfinder.addNodeToGraph(map, gMap['spawns'][0][0], gMap['spawns'][0][1])
         walkableNodes.append(townNode)
         points.append([townNode['x'], townNode['y']])
@@ -434,12 +415,12 @@ class Pathfinder:
             node = Pathfinder.addNodeToGraph(map, spawn[0], spawn[1])
             walkableNodes.append(node)
             points.append([node['x'], node['y']])
-        Pathfinder.logger.debug(f"  spawns completion: {(datetime.now() - spawnsStart).total_seconds()}\n")
+        # print(f"  spawns completion: {(datetime.utcnow().timestamp() - spawnsStart)}\n")
         
         # collect link data
-        linksStart = datetime.now()
-        Pathfinder.logger.debug("  Adding walkable links...")
-        Pathfinder.logger.debug(f"  # nodes: {len(walkableNodes)}")
+        # linksStart = datetime.utcnow().timestamp()
+        # print("  Adding walkable links...")
+        # print(f"  # nodes: {len(walkableNodes)}")
         for fromNode in walkableNodes:
             # add destination nodes and links to maps that are reachable through the door(s)
             for door in doors:
@@ -509,7 +490,7 @@ class Pathfinder:
                 linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x2, 'y': y2, 'spawn': None })
                 links.append([node2, node1])
                 linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x1, 'y': y1, 'spawn': None })
-
+        # print(f"  Link completion: {(datetime.utcnow().timestamp() - linksStart)}\n")
         linkAttr['data'] = linkData
         Pathfinder.graph.add_edges(links, linkAttr)
     
@@ -718,8 +699,8 @@ class Pathfinder:
 
         maps = [Constants.PATHFINDER_FIRST_MAP]
 
-        start = datetime.now()
-        Pathfinder.logger.debug("Preparing Pathfinder...")
+        start = datetime.utcnow().timestamp()
+        print("Preparing Pathfinder...")
 
         i = 0
         while i < len(maps):
@@ -760,6 +741,6 @@ class Pathfinder:
                 else:
                     print('The winterland map has changed, cheat to walk to icegolem is not enabled.')
 
-        Pathfinder.logger.debug(f"Pathfinding prepared! ({(datetime.now() - start).total_seconds()}s)")
+        Pathfinder.logger.debug(f"Pathfinding prepared! ({(datetime.utcnow().timestamp() - start)}s)")
         Pathfinder.logger.debug(f"  # Nodes: {len(Pathfinder.graph.vs)}")
         Pathfinder.logger.debug(f"  # Links: {len(Pathfinder.graph.es)}")
