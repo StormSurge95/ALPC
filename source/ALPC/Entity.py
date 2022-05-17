@@ -64,6 +64,9 @@ class Entity:
         for key in data:
             setattr(self, key, data[key])
 
+    def __getitem__(self, key):
+        return getattr(self, key)
+
     def calculateDamageRange(self, defender) -> list:
         if getattr(defender, '1hp', False):
             return [1, 1]
