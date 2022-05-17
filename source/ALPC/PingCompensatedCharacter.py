@@ -17,16 +17,11 @@ class PingCompensatedCharacter(Character):
             await self.disconnect()
             raise e
     
-    def setNextSkill(self, skill, next):
-        second = next.second - self.ping
-        wholeSecond = math.floor(second)
-        microsecond = next.microsecond + math.ceil((second - wholeSecond) * 1000000)
-        while microsecond >= 1000000:
-            microsecond -= 999999
-            wholeSecond += 1
-        super().setNextSkill(skill, datetime(next.year, next.month, next.day, next.hour, next.minute, wholeSecond, microsecond, next.tzinfo))
+    def setNextSkill(self, skill: str, next: float):
+        next -= self.ping
+        super().setNextSkill(skill, next)
     
-    def parseCharacter(self, data) -> None:
+    def parseCharacter(self, data: dict) -> None:
         super().parseCharacter(data)
 
         pingCompensation = self.ping
@@ -55,7 +50,7 @@ class PingCompensatedCharacter(Character):
                 if self.q[process]['ms'] <= 0:
                     del self.q[process]
         
-    def parseEntities(self, data):
+    def parseEntities(self, data: dict):
         super().parseEntities(data)
 
         pingCompensation = self.ping
@@ -104,7 +99,7 @@ class PingCompensatedCharacter(Character):
                     if entity.s[condition]['ms'] <= 0:
                         del entity.s[condition]
     
-    def parseQData(self, data):
+    def parseQData(self, data: dict):
         
         pingCompensation = self.ping
 

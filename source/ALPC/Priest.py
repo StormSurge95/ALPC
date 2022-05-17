@@ -7,7 +7,7 @@ from .PingCompensatedCharacter import PingCompensatedCharacter
 class Priest(PingCompensatedCharacter):
     ctype = 'priest'
 
-    async def absorbSins(self, target):
+    async def absorbSins(self, target: str):
         async def absorbFn():
             nonlocal self, target
             if not self.ready: raise Exception("We aren't ready yet [absorbSins].")
@@ -34,7 +34,7 @@ class Priest(PingCompensatedCharacter):
             return absorbed.result()
         return await Tools.tryExcept(absorbFn)
     
-    async def curse(self, target):
+    async def curse(self, target: str):
         async def curseFn():
             nonlocal self, target
             if not self.ready: raise Exception("We aren't ready yet [curse].")
@@ -88,7 +88,7 @@ class Priest(PingCompensatedCharacter):
             return blessed.result()
         return await Tools.tryExcept(dbFn)
     
-    async def heal(self, id):
+    async def heal(self, id: str):
         async def healFn():
             nonlocal self, id
             if not self.ready: raise Exception("We aren't ready yet [heal].")
@@ -169,7 +169,7 @@ class Priest(PingCompensatedCharacter):
             return partyHealed.result()
         return await Tools.tryExcept(partyHealFn)
     
-    async def revive(self, target, essenceOfLife = None):
+    async def revive(self, target: str, essenceOfLife: int = None):
         if essenceOfLife == None:
             essenceOfLife = self.locateItem('essenceoflife')
         async def reviveFn():

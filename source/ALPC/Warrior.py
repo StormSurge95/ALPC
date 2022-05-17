@@ -135,9 +135,7 @@ class Warrior(PingCompensatedCharacter):
             Tools.setTimeout(reject, Constants.TIMEOUT, f"dash timeout ({Constants.TIMEOUT}s)")
             self.socket.on('eval', dashedCheck)
             self.socket.on('game_response', failCheck)
-            x = round(to['x'], -1) # NOTE: Dash currently (as of 11-13-2021) rounds to the nearest 10 for x/y coords
-            y = round(to['y'], -1) # (e.g. '{x: 213, y: 216}' will become '{x: 210, y: 220}') so we take care of that here
-            await self.socket.emit('skill', { 'name': 'dash', 'x': x, 'y': y })
+            await self.socket.emit('skill', { 'name': 'dash', 'x': to['x'], 'y': to['y'] })
             while not dashed.done():
                 await asyncio.sleep(Constants.SLEEP)
             return dashed.result()

@@ -37,7 +37,7 @@ class Mage(PingCompensatedCharacter):
             return performedAlchemy.result()
         return await Tools.tryExcept(alcFn)
     
-    async def blink(self, x, y):
+    async def blink(self, x: int, y: int):
         async def blinkFn():
             nonlocal self, x, y
             if not self.ready:
@@ -78,7 +78,7 @@ class Mage(PingCompensatedCharacter):
             return blinked.result()
         return await Tools.tryExcept(blinkFn)
 
-    async def burst(self, target):
+    async def burst(self, target: str):
         async def burstFn():
             nonlocal self, target
             if not self.ready:
@@ -106,7 +106,7 @@ class Mage(PingCompensatedCharacter):
             return bursted.result()
         return await Tools.tryExcept(burstFn)
 
-    async def cburst(self, targets):
+    async def cburst(self, targets: str):
         async def cBurstFn():
             nonlocal self, targets
             if not self.ready:
@@ -157,7 +157,7 @@ class Mage(PingCompensatedCharacter):
             return cbursted.result()
         return await Tools.tryExcept(cBurstFn)
 
-    async def energize(self, target, mp = None):
+    async def energize(self, target: str, mp: int = None):
         async def enFn():
             nonlocal self, target, mp
             if not self.ready:
@@ -188,7 +188,7 @@ class Mage(PingCompensatedCharacter):
             return energized.result()
         return await Tools.tryExcept(enFn)
 
-    async def entangle(self, target, essenceOfNature = None):
+    async def entangle(self, target: str, essenceOfNature: int = None):
         async def entFn():
             nonlocal self, target, essenceOfNature
             if not self.ready:
@@ -248,7 +248,7 @@ class Mage(PingCompensatedCharacter):
             return lit.result()
         return await Tools.tryExcept(lightFn)
 
-    async def magiport(self, target):
+    async def magiport(self, target: str):
         async def magiFn():
             nonlocal self, target
             if not self.ready:
@@ -278,7 +278,7 @@ class Mage(PingCompensatedCharacter):
             return magiportOfferSent.result()
         return await Tools.tryExcept(magiFn)
 
-    async def applyReflection(self, target):
+    async def applyReflection(self, target: str):
         async def reFn():
             nonlocal self, target
             if not self.ready:

@@ -23,7 +23,7 @@ handler.setLevel(logging.DEBUG)
 handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
 logger.addHandler(handler)
 
-class Game:
+class Game(object):
     loggedIn: bool = False
 
     servers: dict = {}
@@ -240,7 +240,7 @@ class Game:
         return await response.text()
 
     @staticmethod
-    def optimizeG(g):
+    def optimizeG(g: dict):
         del g['animations']
         del g['docs']
         del g['images']
@@ -355,11 +355,11 @@ class Game:
         elif ctype == 'priest':
             player = Priest(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
         elif ctype == 'ranger':
-            pass
+            player = Ranger(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
         elif ctype == 'rogue':
-            pass
+            player = Rogue(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
         elif ctype == 'warrior':
-            pass
+            player = Warrior(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
         else:
             player = PingCompensatedCharacter(userID, userAuth, characterID, Game.G, Game.servers[sRegion][sID], log)
 

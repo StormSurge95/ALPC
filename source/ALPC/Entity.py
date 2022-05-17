@@ -1,10 +1,8 @@
-from pprint import pprint
+from .Character import Character
+from .Player import Player
 from .Tools import Tools
-import logging
-import logging.config
-import sys
 
-class Entity:
+class Entity(object):
     def __init__(self, data: dict, map: str, instance: str, G: dict):
         self.G = G
         self.max_hp = G['monsters'][data['type']]['hp']
@@ -64,10 +62,10 @@ class Entity:
         for key in data:
             setattr(self, key, data[key])
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: str):
         return getattr(self, key)
 
-    def calculateDamageRange(self, defender) -> list:
+    def calculateDamageRange(self, defender: Character | 'Entity' | Player) -> list:
         if getattr(defender, '1hp', False):
             return [1, 1]
 
@@ -91,7 +89,7 @@ class Entity:
         else:
             return [baseDamage * 0.9, baseDamage * 1.1]
 
-    def couldDieToProjectiles(self, character, projectiles: dict, players: dict, entities: dict) -> bool:
+    def couldDieToProjectiles(self, character: Character, projectiles: dict, players: dict, entities: dict) -> bool:
         if self.avoidance >= 100:
             return False
         incomingProjectileDamage = 0
@@ -126,7 +124,7 @@ class Entity:
                 return True
         return False
 
-    def couldGiveCreditForKill(self, player) -> bool:
+    def couldGiveCreditForKill(self, player: Character) -> bool:
         if not hasattr(self, 'target'):
             return True
         if self.cooperative:
@@ -135,7 +133,7 @@ class Entity:
             return True
         return False
 
-    def isAttackingPartyMember(self, player) -> bool:
+    def isAttackingPartyMember(self, player: Character) -> bool:
         if not hasattr(self, 'target'):
             return False
         if self.isAttackingUs(player):
@@ -144,12 +142,12 @@ class Entity:
             return True
         return False
 
-    def isAttackingUs(self, player) -> bool:
+    def isAttackingUs(self, player: Character) -> bool:
         if hasattr(self, 'target'):
             return self.target == player.id
         return False
 
-    def isTauntable(self, by) -> bool:
+    def isTauntable(self, by: Character) -> bool:
         if not hasattr(self, 'target'):
             return True
         if self.isAttackingPartyMember(by):
@@ -174,7 +172,7 @@ class Entity:
 
         return burnDamage > self.hp
 
-    def willDieToProjectiles(self, character, projectiles, players, entities) -> bool:
+    def willDieToProjectiles(self, character: Character, projectiles: dict, players: dict, entities: dict) -> bool:
         if hasattr(self, 'avoidance'):
             return False
         incomingProjectileDamage = 0

@@ -1,7 +1,8 @@
+from .Character import Character
+from .Entity import Entity
 from .Tools import Tools
 import logging
 import logging.config
-import sys
 
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -9,8 +10,8 @@ handler.setLevel(logging.DEBUG)
 handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
 logger.addHandler(handler)
 
-class Player:
-    def __init__(self, data, map, instance, g):
+class Player(object):
+    def __init__(self, data: dict, map: str, instance: str, g: dict):
         self.G = g
         self.map = map
         self.inst = instance
@@ -24,14 +25,14 @@ class Player:
 
         self.updateData(data)
 
-    def updateData(self, data):
+    def updateData(self, data: dict):
         if hasattr(self, 'id') and self.id != data['id']:
             raise Exception('The entity\'s ID does not match')
 
         for key in data.keys():
             setattr(self, key, data[key])
 
-    def calculateDamageRange(self, defender, skill: str = 'attack') -> list:
+    def calculateDamageRange(self, defender: Character | Entity | 'Player', skill: str = 'attack') -> list:
         if hasattr(defender, 'immune') and (skill in ['3shot', '5shot', 'burst', 'cburst', 'supershot', 'taunt']):
             return [0, 0]
 
@@ -77,7 +78,7 @@ class Player:
 
         return [lowerLimit, upperLimit]
 
-    def isFriendly(self, bot) -> bool:
+    def isFriendly(self, bot: Character) -> bool:
         if hasattr(self, 'npc'):
             return True
 

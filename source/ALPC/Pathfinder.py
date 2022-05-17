@@ -11,7 +11,7 @@ UNKNOWN = 1
 UNWALKABLE = 2
 WALKABLE = 3
 
-class Pathfinder:
+class Pathfinder(object):
     G = None
     FIRST_MAP = 'main'
     TRANSPORT_COST = 50

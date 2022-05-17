@@ -65,7 +65,7 @@ class Merchant(PingCompensatedCharacter):
             return fished.result()
         return await Tools.tryExcept(fishFn)
 
-    async def joinGiveaway(self, slot, id, rid):
+    async def joinGiveaway(self, slot: str, id: str, rid: str):
         async def joinFn():
             nonlocal self, slot, id, rid
             if not self.ready:
@@ -81,7 +81,7 @@ class Merchant(PingCompensatedCharacter):
             await self.socket.emit('join_giveaway', { 'slot': slot, 'id': id, 'rid': rid })
         return await Tools.tryExcept(joinFn)
 
-    async def listForSale(self, itemPos, price, tradeSlot = None, quantity = 1):
+    async def listForSale(self, itemPos: int, price: int, tradeSlot: str = None, quantity: int = 1):
         async def listFn():
             nonlocal self, itemPos, price, tradeSlot, quantity
             if not self.ready:
@@ -235,7 +235,7 @@ class Merchant(PingCompensatedCharacter):
             return mined.result()
         return await Tools.tryExcept(mineFn)
 
-    async def mluck(self, target):
+    async def mluck(self, target: str):
         async def luckFn():
             nonlocal self, target
             if not self.ready:
