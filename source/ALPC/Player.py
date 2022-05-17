@@ -1,5 +1,3 @@
-from .Character import Character
-from .Entity import Entity
 from .Tools import Tools
 import logging
 import logging.config
@@ -32,7 +30,7 @@ class Player(object):
         for key in data.keys():
             setattr(self, key, data[key])
 
-    def calculateDamageRange(self, defender: Character | Entity | 'Player', skill: str = 'attack') -> list:
+    def calculateDamageRange(self, defender, skill: str = 'attack') -> list:
         if hasattr(defender, 'immune') and (skill in ['3shot', '5shot', 'burst', 'cburst', 'supershot', 'taunt']):
             return [0, 0]
 
@@ -78,7 +76,7 @@ class Player(object):
 
         return [lowerLimit, upperLimit]
 
-    def isFriendly(self, bot: Character) -> bool:
+    def isFriendly(self, bot) -> bool:
         if hasattr(self, 'npc'):
             return True
 

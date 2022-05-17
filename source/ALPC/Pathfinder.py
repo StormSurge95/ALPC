@@ -1,3 +1,4 @@
+from array import array
 from datetime import datetime
 import logging
 import math
@@ -224,57 +225,48 @@ class Pathfinder(object):
         grid = [UNKNOWN] * (height * width)
         for yLine in gGeo['y_lines']:
             lowerY = max([0, yLine[0] - minY - base['vn']])
-            upperY = yLine[0] - minY + base['v']
-            for y in range(lowerY, height):
-                if y > upperY:
-                    break
+            upperY = min([yLine[0] - minY + base['v'] + 1, height])
+            for y in range(lowerY, upperY):
                 lowerX = max([0, yLine[1] - minX - base['h']])
-                upperX = yLine[2] - minX + base['h']
-                for x in range(lowerX, width):
-                    if x > upperX:
-                        break
+                upperX = min([yLine[2] - minX + base['h'] + 1, width])
+                for x in range(lowerX, upperX):
                     grid[y * width + x] = UNWALKABLE
         
         for xLine in gGeo['x_lines']:
             lowerX = max([0, xLine[0] - minX - base['h']])
-            upperX = xLine[0] - minX + base['h']
-            for x in range(lowerX, width):
-                if x > upperX:
-                    break
+            upperX = min([xLine[0] - minX + base['h'] + 1, width])
+            for x in range(lowerX, upperX):
                 lowerY = max([0, xLine[1] - minY - base['vn']])
-                upperY = xLine[2] - minY + base['v']
-                for y in range(lowerY, height):
-                    if y > upperY:
-                        break
+                upperY = min([xLine[2] - minY + base['v'] + 1, height])
+                for y in range(lowerY, upperY):
                     grid[y * width + x] = UNWALKABLE
         
         for spawn in gMap['spawns']:
             x = math.trunc(spawn[0]) - minX
             y = math.trunc(spawn[1]) - minY
-            if grid[y * width + x] == WALKABLE:
-                continue
-            stack = [[y,x]]
-            while len(stack) > 0:
-                [y,x] = stack.pop()
-                while x >= 0 and grid[y * width + x] == UNKNOWN:
-                    x -= 1
-                x += 1
-                spanAbove = 0
-                spanBelow = 0
-                while x < width and grid[y * width + x] == UNKNOWN:
-                    grid[y * width + x] = WALKABLE
-                    if not spanAbove and y > 0 and grid[(y - 1) * width + x] == UNKNOWN:
-                        stack.append([y - 1, x])
-                        spanAbove = 1
-                    elif spanAbove and y > 0 and grid[(y - 1) * width + x] != UNKNOWN:
-                        spanAbove = 0
-                    
-                    if not spanBelow and y < (height - 1) and grid[(y + 1) * width + x] == UNKNOWN:
-                        stack.append([y + 1, x])
-                        spanBelow = 1
-                    elif spanBelow and y < (height - 1) and grid[(y + 1) * width + x] != UNKNOWN:
-                        spanBelow = 0
+            if grid[y * width + x] != WALKABLE:
+                stack = [[y,x]]
+                while len(stack) > 0:
+                    [y,x] = stack.pop()
+                    while x >= 0 and grid[y * width + x] == UNKNOWN:
+                        x -= 1
                     x += 1
+                    spanAbove = 0
+                    spanBelow = 0
+                    while x < width and grid[y * width + x] == UNKNOWN:
+                        grid[y * width + x] = WALKABLE
+                        if not spanAbove and y > 0 and grid[(y - 1) * width + x] == UNKNOWN:
+                            stack.append([y - 1, x])
+                            spanAbove = 1
+                        elif spanAbove and y > 0 and grid[(y - 1) * width + x] != UNKNOWN:
+                            spanAbove = 0
+                        
+                        if not spanBelow and y < (height - 1) and grid[(y + 1) * width + x] == UNKNOWN:
+                            stack.append([y + 1, x])
+                            spanBelow = 1
+                        elif spanBelow and y < (height - 1) and grid[(y + 1) * width + x] != UNKNOWN:
+                            spanBelow = 0
+                        x += 1
         # print(f"  grid size: {len(grid)}")
         # print(f"  grid completion: {(datetime.utcnow().timestamp() - gridStart)}\n")
         Pathfinder.grids[map] = grid
