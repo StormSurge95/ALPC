@@ -284,7 +284,7 @@ class Pathfinder(object):
         width = maxX - minX
         height = maxY - minY
 
-        points = []         # list of points for delaunay
+        points = set()         # list of points for delaunay
         links = []          # list of links between walkable nodes as [point1, point2]
         linkData = []       # list of dictionaries containing attributes for particular links
         linkAttr = {}       # dictionary containing list of attributes for each link
@@ -322,8 +322,7 @@ class Pathfinder(object):
                     or ((bottomRight == UNWALKABLE) and (UNWALKABLE not in [middleRight, bottomCenter]))    # outside-2
                     or ((upperRight == UNWALKABLE) and (UNWALKABLE not in [upperCenter, middleRight]))      # outside-3
                     or ((upperLeft == UNWALKABLE) and (UNWALKABLE not in [upperCenter, middleLeft]))):      # outside-4
-                    if [mapX, mapY] not in points:
-                        points.append([mapX, mapY])
+                    points.add((mapX, mapY))
         # print(f"  corner completion: {(datetime.utcnow().timestamp() - cornersStart)}\n")
         
         # add nodes at transporters (we'll look for close nodes to transporters later)
@@ -334,8 +333,7 @@ class Pathfinder(object):
         for npc in transporters:
             pos = npc['position']
             closest = Pathfinder.findClosestSpawn(map, pos[0], pos[1])
-            if [closest['x'], closest['y']] not in points:
-                points.append([closest['x'], closest['y']])
+            points.add((closest['x'], closest['y']))
 
             # make more points around transporter
             angle = 0
@@ -343,8 +341,7 @@ class Pathfinder(object):
                 x = math.trunc(pos[0] + math.cos(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
                 y = math.trunc(pos[1] + math.sin(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
                 if Pathfinder.canStand({'map': map, 'x': x, 'y': y}):
-                    if [x,y] not in points:
-                        points.append([x, y])
+                    points.add((x, y))
                 angle += math.pi / 32
         # print(f"  transporter completion: {(datetime.utcnow().timestamp() - transportersStart)}\n")
 
@@ -356,8 +353,7 @@ class Pathfinder(object):
         for door in doors:
             # From
             spawn = gMap['spawns'][door[6]]
-            if [spawn[0], spawn[1]] not in points:
-                points.append([spawn[0], spawn[1]])
+            points.add((spawn[0], spawn[1]))
 
             # make more points around the door
             doorX = door[0]
@@ -375,8 +371,8 @@ class Pathfinder(object):
                 while angle < math.pi * 2:
                     x = math.trunc(point['x'] + math.cos(angle) * (Constants.DOOR_REACH_DISTANCE - 10))
                     y = math.trunc(point['y'] + math.sin(angle) * (Constants.DOOR_REACH_DISTANCE - 10))
-                    if Pathfinder.canStand({ 'map': map, 'x': x, 'y': y }) and [x,y] not in points:
-                        points.append([x, y])
+                    if Pathfinder.canStand({ 'map': map, 'x': x, 'y': y }):
+                        points.add((x, y))
                     angle += math.pi / 32
         # print(f"  door completion: {(datetime.utcnow().timestamp() - doorsStart)}\n")
         
@@ -386,17 +382,12 @@ class Pathfinder(object):
         # print(f"  # nodes: {len(walkableNodes)}")
         townLinkData = { 'map': map, 'type': 'town', 'x': gMap['spawns'][0][0], 'y': gMap['spawns'][0][1], 'spawn': None, 'key': None }
         for spawn in gMap['spawns']:
-            if [spawn[0], spawn[1]] not in points:
-                points.append([spawn[0], spawn[1]])
+            points.add((spawn[0], spawn[1]))
         # print(f"  spawns completion: {(datetime.utcnow().timestamp() - spawnsStart)}\n")
 
-        vertexNames = [f"{map}:{x},{y}" for [x,y] in points]
-        mapAttr = [map] * len(vertexNames)
-        xAttr = [p[0] for p in points]
-        yAttr = [p[1] for p in points]
-        attrs = { 'map': mapAttr, 'x': xAttr, 'y': yAttr }
+        vertexNames = [f"{map}:{x},{y}" for (x, y) in points]
+        attrs = { 'map': [map] * len(vertexNames), 'x': [p[0] for p in points], 'y': [p[1] for p in points] }
         Pathfinder.graph.add_vertices(vertexNames, attrs)
-        #walkableNodes = [Pathfinder.addNodeToGraph(map, x, y) for [x, y] in points]
         walkableNodes = Pathfinder.graph.vs.select(map_eq=map)
         
         # collect link data
@@ -450,7 +441,7 @@ class Pathfinder(object):
                 linkData.append({ 'key': leaveLinkData['key'], 'map': leaveLinkData['map'], 'type': leaveLinkData['type'], 'x': leaveLinkData['x'], 'y': leaveLinkData['y'], 'spawn': leaveLinkData['spawn'] })
 
         # check if we can walk to other nodes
-        delaunay = Delaunator(points)
+        delaunay = Delaunator(list(points))
         
         for i in range(0, len(delaunay.halfedges)):
             halfedge = delaunay.halfedges[i]
