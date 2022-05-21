@@ -64,7 +64,7 @@ class Character(Observer):
         self.int: int = 0
         self.ipass: str = ''
         self.isize: int = 0
-        self.items: list = []
+        self.items: list[dict] = []
         self.lastSmartMove: float = datetime.utcnow().timestamp()
         self.level: int = 0
         self.lifesteal: int = 0
