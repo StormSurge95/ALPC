@@ -36,15 +36,27 @@ class Tools:
 
     @staticmethod
     def setTimeout(fn, delay: float, *args, **kwargs):
-        async def schedule():
+        async def timeout():
             await asyncio.sleep(delay)
 
             if asyncio.iscoroutinefunction(fn):
                 await fn(*args, **kwargs)
             else:
                 fn(*args, **kwargs)
-        fut = asyncio.ensure_future(schedule())
+        fut = asyncio.ensure_future(timeout())
         return fut
+
+    @staticmethod
+    def setInterval(fn, delay, *args, **kwargs):
+        async def interval():
+            while True:
+                await asyncio.sleep(delay)
+                if asyncio.iscoroutinefunction(fn):
+                    await fn(*args, **kwargs)
+                else:
+                    fn(*args, **kwargs)
+        inter = asyncio.ensure_future(interval())
+        return inter
 
     @staticmethod
     def clearTimeout(fut: asyncio.Task):
