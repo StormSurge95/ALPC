@@ -9,7 +9,7 @@ This package currently requires `aiohttp`, `aiosignal`, `async-timeout`, `attrs`
 **All** of these requirements are installable through pip, and their individual installations are also taken care of through the install of ALPC.
 
 ## Installation
-The PyPI page can be found [here](https://pypi.org/project/ALPC/). In order to install, simply install the package using pip like so:
+The PyPI page can be found [here](https://pypi.org/project/ALPC/). In order to install, simply use pip like so:
 <details><summary>Unix/Linux</summary>
 
   ```
@@ -29,7 +29,7 @@ The PyPI page can be found [here](https://pypi.org/project/ALPC/). In order to i
 
 ## Usage
 * First: be sure to install the package from PyPI using pip.
-* Second: create a `credentials.json` file like so:
+* Second: create a `credentials.json` file like so (the 'mongo' parameter is optional for if you have a mongodb database that you'd like to link to the client):
 ```json
 {
     "email": "your_email@address.com",
@@ -99,7 +99,6 @@ Disconnecting...
 
 ## Final Notes
 * AS STATED, THIS PACKAGE IS STILL A WORK IN PROGRESS. If you have ANY issues at all or any suggestions or come accross any bugs, feel free to either submit them to the issues tab or submit your info to the existing issue if your bug/issue/suggestion is already there.
-* The two current largest bugs I have are as follows:
-  1. The fact that Pathfinder takes FAR too long to prepare.
-  2. For some reason, my modifications to the socketio package I'm using seem to interfere with its ability to disconnect properly.
-  Any help with these two bugs would be very much appreciated.
+* The current largest bug I have is as follows:
+  1. Pathfinder takes FAR too long to prepare. We've sped it up by 3 seconds with the most recent update; but it's still not enough.
+  Any help with bugs (both found and not found) would be very much appreciated.
