@@ -2,51 +2,70 @@ from .Tools import Tools
 
 class Entity:
     def __init__(self, data: dict, map: str, instance: str, G: dict):
-        self.G = G
-        self.max_hp = G['monsters'][data['type']]['hp']
-        self.max_mp = G['monsters'][data['type']]['mp']
-        self.map = map
-        setattr(self, 'in', instance)
-        self.moving = False
-        self.cooperative = False
-        
-        self.apiercing = 0
-        self.armor = 0
-        self.avoidance = 0
-        self.blast = 0
-        self.breaks = 0
-        self.crit = 0
-        self.critdamage = 0
-        self.evasion = 0
-        self.lifesteal = 0
-        self.mcourage = 0
-        self.reflection = 0
-        self.resistance = 0
-        self.rpiercing = 0
-
         setattr(self, '1hp', False)
-        self.aa = 0
-        self.achievements = []
-        self.cute = False
-        self.drop_on_hit = False
-        self.escapist = False
+        self.G = G
+        self.aa: int = 0
+        self.abs: bool = False
+        self.achievements: list = []
+        self.aggro: int = 0
+        self.angle: float = 0
+        self.apiercing: int = 0
+        self.armor: int = 0
+        self.attack: int = 0
+        self.avoidance: int = 0
+        self.blast: int = 0
+        self.breaks: int = 0
+        self.cid: int = 0
+        self.cooperative: bool = False
+        self.crit: int = 0
+        self.critdamage: int = 0
+        self.cute: bool = False
+        self.damage_type: str = ''
+        self.drop_on_hit: bool = False
+        self.escapist: bool = False
+        self.evasion: int = 0
+        self.frequency: float = 0
         setattr(self, 'global', False)
+        self.going_x: float = 0
+        self.going_y: float = 0
         self.goldsteal = 0
-        self.humanoid = False
-        self.passive = False
-        self.peaceful = False
-        self.poisonous = False
-        self.prefix = ""
-        self.roam = False
-        self.spawns = []
-        self.special = False
-        self.stationary = False
-        self.supporter = False
-        self.trap = False
-        self.unlist = False
-
-        self.level = 1
-        self.s = {}
+        self.hp: int = 0
+        self.humanoid: bool = False
+        self.id: str = None
+        setattr(self, 'in', instance)
+        self.level: int = 1
+        self.lifesteal: int = 0
+        self.map: str = map
+        self.max_hp: int = G['monsters'][data['type']]['hp']
+        self.max_mp: float = G['monsters'][data['type']]['mp']
+        self.mcourage: int = 0
+        self.move_num: int = 0
+        self.moving: bool = False
+        self.mp: int = 0
+        self.name: str = ''
+        self.passive: bool = False
+        self.peaceful: bool = False
+        self.poisonous: bool = False
+        self.prefix: str = ''
+        self.rage: float = 0
+        self.range: int = 0
+        self.reflection: int = 0
+        self.resistance: int = 0
+        self.respawn: int = 0
+        self.roam: bool = False
+        self.rpiercing: int = 0
+        self.s: dict[str, dict] = {}
+        self.spawns: list = []
+        self.special: bool = False
+        self.speed: int = 0
+        self.stationary: bool = False
+        self.supporter: bool = False
+        self.trap: bool = False
+        self.type: str = ''
+        self.unlist: bool = False
+        self.x: float = 0
+        self.xp: int = 0
+        self.y: float = 0
 
         for gKey in G['monsters'][data['type']]:
             setattr(self, gKey, G['monsters'][data['type']][gKey])
@@ -54,20 +73,20 @@ class Entity:
         self.updateData(data)
 
     def updateData(self, data: dict):
-        if (hasattr(self, 'id') and getattr(self, 'id') != data['id']):
+        if (self.id != None and self.id != data['id']):
             print("The entity's ID does not match")
-            raise Exception()
+            raise Exception("The entity's ID does not match")
         for key in data:
             setattr(self, key, data[key])
 
     def __getitem__(self, key: str):
         return getattr(self, key)
 
-    def get(self, key):
-        try:
+    def get(self, key, default = None):
+        if hasattr(self, key):
             return getattr(self, key)
-        except:
-            return None
+        else:
+            return default
 
     def calculateDamageRange(self, defender) -> list:
         if getattr(defender, '1hp', False):

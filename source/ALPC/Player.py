@@ -10,27 +10,61 @@ logger.addHandler(handler)
 
 class Player(object):
     def __init__(self, data: dict, map: str, instance: str, g: dict):
-        self.G = g
-        self.map = map
+        self.G: dict[str, dict[str, dict[str, dict]]] = g
         setattr(self, 'in', instance)
-        self.logger = logging.getLogger('Player')
+        self.map: str = map
+        self.angle: float = None
+        self.armor: int = None
+        self.attack: int = None
+        self.c: dict = {}
+        self.cid: int = None
+        self.ctype: str = None
+        self.cx: dict = {}
+        self.frequency: float = None
+        self.hp: int = None
+        self.id: str = None
+        setattr(self, 'in', instance)
+        self.map: str = map
+        self.max_hp: int = None
+        self.max_mp: int = None
+        self.mp: int = None
+        self.owner: str = None
+        self.q: dict = None
+        self.range: int = None
+        self.resistance: int = None
+        self.s: dict = {}
+        self.skin: str = None
+        self.speed: int = None
+        self.x: int | float = None
+        self.xp: int = None
+        self.y: int | float = None
+        if data.get('npc') != None:
+            self.abs: bool = None
+            self.allow: bool = None
+            self.going_x: int = None
+            self.going_y: int = None
+            self.move_num: int = None
+            self.moving: bool = None
+            self.npc: str = None
+        else:
+            self.afk: bool = None
+            self.age: int = None
+            self.damage_type = self.G['classes'][data['ctype']]['damage_type']
+            self.party: str = None
+            self.pdps: float = None
+            self.rip: bool = None
+            self.slots: dict[str, dict] = {}
+            self.stand: str = None
+            self.target: str = None
+        self.updateData(data)
+        self.logger = logging.getLogger(self.id)
         handler = logging.StreamHandler()
         handler.setLevel(logging.INFO)
         handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
         self.logger.addHandler(handler)
-        if not data.get('npc', False):
-            self.damage_type = self.G['classes'][data['ctype']]['damage_type']
-
-        self.updateData(data)
-
-    def __dir__(self):
-        attNames = super().__dir__()
-        attTypes = [type(getattr(self, name)) for name in attNames]
-        ret = list(zip(attNames, attTypes))
-        return ret
 
     def updateData(self, data: dict):
-        if hasattr(self, 'id') and self.id != data['id']:
+        if self.id != None and self.id != data['id']:
             raise Exception('The entity\'s ID does not match')
 
         for key in data.keys():

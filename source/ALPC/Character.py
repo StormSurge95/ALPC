@@ -211,7 +211,7 @@ class Character(Observer):
         if hasattr(self, 'party'):
             for i in range(0, len(data['players'])):
                 player = data['players'][i]
-                partyPlayer = getattr(self, 'partyData', None).get('party', None).get(player.id, None)
+                partyPlayer = getattr(self, 'partyData', {}).get('party', {}).get(player.id, None)
                 if not partyPlayer:
                     continue
 
@@ -2386,7 +2386,7 @@ class Character(Observer):
                     self.socket.off('ui', soldCheck)
                     self.socket.off('game_response', failCheck)
                     sold.set_result(value)
-            def soldCheck(data):
+            def soldCheck(data: dict):
                 if data.get('type', False) and data['name'] == self.id and int(data['num']) == itemPos:
                     if Tools.hasKey(data.get('item', {}), 'q') and quantity != data['item']['q']:
                         reject(f"Attempted to sell {quantity} {data['item']['name']}(s), but actually sold {data['item']['q']}.")
