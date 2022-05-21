@@ -39,13 +39,13 @@ class PingCompensatedCharacter(Character):
                 self.y = self.y + math.sin(angle) * distanceTravelled
         
         for condition in list(self.s):
-            if Tools.hasKey(self.s[condition], 'ms'):
+            if self.s[condition].get('ms') != None:
                 self.s[condition]['ms'] -= pingCompensation * 1000
                 if self.s[condition]['ms'] <= 0:
                     del self.s[condition]
         
         for process in list(self.q):
-            if Tools.hasKey(self.q[process], 'ms'):
+            if self.q[process].get('ms') != None:
                 self.q[process]['ms'] -= pingCompensation * 1000
                 if self.q[process]['ms'] <= 0:
                     del self.q[process]
@@ -72,7 +72,7 @@ class PingCompensatedCharacter(Character):
                 entity.y = entity.y + math.sin(angle) * distanceTravelled
             
             for condition in list(entity.s):
-                if Tools.hasKey(entity.s[condition], 'ms'):
+                if entity.s[condition].get('ms') != None:
                     entity.s[condition]['ms'] -= pingCompensation * 1000
                     if entity.s[condition]['ms'] <= 0:
                         del entity.s[condition]
@@ -94,7 +94,7 @@ class PingCompensatedCharacter(Character):
                 entity.y = entity.y + math.sin(angle) * distanceTravelled
             
             for condition in list(entity.s):
-                if Tools.hasKey(entity.s[condition], 'ms'):
+                if entity.s[condition].get('ms') != None:
                     entity.s[condition]['ms'] -= pingCompensation * 1000
                     if entity.s[condition]['ms'] <= 0:
                         del entity.s[condition]
@@ -103,13 +103,13 @@ class PingCompensatedCharacter(Character):
         
         pingCompensation = self.ping
 
-        if Tools.hasKey(data['q'], 'upgrade'):
+        if data['q'].get('upgrade') != None:
             data['q']['upgrade']['ms'] -= pingCompensation * 1000
             if data['q']['upgrade']['ms'] <= 0:
                 del self.q['upgrade']
             else:
                 self.q['upgrade'] = data['q']['upgrade']
-        if Tools.hasKey(data['q'], 'compound'):
+        if data['q'].get('compound') != None:
             data['q']['compound']['ms'] -= pingCompensation * 1000
             if data['q']['compound']['ms'] <= 0:
                 del self.q['compound']

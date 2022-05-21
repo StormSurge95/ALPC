@@ -11,7 +11,7 @@ class Paladin(PingCompensatedCharacter):
         async def msOffFn():
             nonlocal self
             if not self.ready: raise Exception("We aren't ready yet [manaShieldOff].")
-            if not Tools.hasKey(self.s, 'mshield'): return False # it's already off
+            if self.s.get('mshield') == None: return False # it's already off
 
             unshield = asyncio.get_event_loop().create_future()
             def reject(reason = None):
@@ -39,7 +39,7 @@ class Paladin(PingCompensatedCharacter):
         async def msOnFn():
             nonlocal self
             if not self.ready: raise Exception("We aren't ready yet [manaShieldOn].")
-            if Tools.hasKey(self.s, 'mshield'): return False
+            if self.s.get('mshield') != None: return False
 
             shielded = asyncio.get_event_loop().create_future()
             def reject(reason = None):

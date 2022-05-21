@@ -17,23 +17,23 @@ class Observer(object):
     pingsPerServer : dict = {}
 
     def __init__(self, serverData: dict, g: dict, log: bool = False):
-        self.socket = psSocketIO.AsyncClient(reconnection=False, logger=log)
-        self.serverData = serverData
-        self.G = g
-        self.lastAllEntities = 0
-        self.lastPositionUpdate = None
+        self.socket: psSocketIO.AsyncClient = psSocketIO.AsyncClient(reconnection=False, logger=log)
+        self.serverData: dict = serverData
+        self.G: dict[str, dict[str, dict]] = g
+        self.S: dict[str, dict] = {}
+        self.lastAllEntities: float = 0
+        self.lastPositionUpdate: float = None
         self.entities: dict[str, Entity] = {}
-        self.map = ''
-        self.pingIndex = 0
-        self.pingMap = {}
-        self.pingNum = 1
-        self.pings = {}
+        self.map: str = ''
+        self.pingIndex: int = 0
+        self.pingMap: dict = {}
+        self.pingNum: int = 1
+        self.pings: dict = {}
         self.players: dict[str, Player] = {}
-        self.projectiles = {}
-        self.S = {}
-        self.server = None
-        self.x: float = 0
-        self.y: float = 0
+        self.projectiles: dict = {}
+        self.server: dict = None
+        self.x: int = 0
+        self.y: int = 0
         if serverData:
             region = serverData['region']
             name = serverData['name']
@@ -44,14 +44,14 @@ class Observer(object):
         return
 
     @property
-    def ping(self):
+    def ping(self) -> float:
         if len(self.pings.values()) == 0:
             return float(0)
         else:
             return min(self.pings.values())
 
-    def actionHandler(self, data):
-        if data.get('instant', False):
+    def actionHandlerO(self, data: dict):
+        if data.get('instant') != None:
             return
 
         attacker = self.players.get(data['attacker'], self.entities.get(data['attacker'], None))
@@ -65,11 +65,11 @@ class Observer(object):
         self.projectiles[data['pid']] = { **data, 'date': datetime.utcnow().timestamp()}
         return
 
-    def deathHandler(self, data):
+    def deathHandlerO(self, data: dict):
         self.deleteEntity(data['id'], True)
         return
 
-    def disappearHandler(self, data):
+    def disappearHandlerO(self, data: dict):
         if self.players.get(data['id'], False):
             del self.players[data['id']]
         else:
@@ -111,18 +111,18 @@ class Observer(object):
                 Database.nextUpdate[key] = datetime.utcnow().timestamp() + Constants.MONGO_UPDATE_S
         return
 
-    def disconnectHandler(self):
+    def disconnectHandlerO(self):
         if (not self.serverData) or (not self.pings) or (len(self.pings) == 0):
             return
         key = f"{self.serverData['region']}{self.serverData['name']}"
         Observer.pingsPerServer[key] = self.pings
         return
 
-    def entitiesHandler(self, data):
+    def entitiesHandlerO(self, data: dict):
         self.parseEntities(data)
         return
 
-    def gameEventHandler(self, data):
+    def gameEventHandlerO(self, data: dict):
         if (self.G.get('monsters', {}).get(data['name'], False)):
             monsterData = { 'hp': self.G['monsters'][data['name']]['hp'], 'lastSeen': datetime.utcnow().timestamp(), 'level': 1, 'map': data['map'], 'x': data['x'], 'y': data['y'] }
             self.S[data['name']] = {**monsterData, 'live': True, 'max_hp': monsterData['hp']}
@@ -130,7 +130,7 @@ class Observer(object):
             Database.connection.ALPC.entities.update_one({ 'serverIdentifier': self.serverData['name'], 'serverRegion': self.serverData['region'], 'type': data['name'] }, { "$set": monsterData }, True)
         return
 
-    def hitHandler(self, data):
+    def hitHandlerO(self, data: dict):
         if data.get('pid', False) == False:
             return
         if data.get('miss', False) or data.get('evade', False):
@@ -159,11 +159,11 @@ class Observer(object):
                 del self.projectiles[data['pid']]
         return
 
-    def newMapHandler(self, data):
+    def newMapHandlerO(self, data: dict):
         self.parseNewMap(data)
         return
 
-    def pingAckHandler(self, data):
+    def pingAckHandlerO(self, data: dict):
         ping = self.pingMap.get(data['id'], None)
         if ping:
             time = (datetime.utcnow().timestamp() - ping['time'])
@@ -175,7 +175,7 @@ class Observer(object):
             del self.pingMap[data['id']]
         return
 
-    def serverInfoHandler(self, data: dict):
+    def serverInfoHandlerO(self, data: dict):
         databaseEntityUpdates = []
         databaseRespawnUpdates = []
         databaseDeletes = set()
@@ -266,7 +266,7 @@ class Observer(object):
         self.S = data
         return
 
-    def welcomeHandler(self, data):
+    def welcomeHandlerO(self, data: dict):
         self.server = data
         return
 
@@ -277,17 +277,17 @@ class Observer(object):
         await self.socket.connect(url)
         self.socket.reconnection = reconnect
 
-        self.socket.on('action', self.actionHandler)
-        self.socket.on('death', self.deathHandler)
-        self.socket.on('disappear', self.disappearHandler)
-        self.socket.on('disconnect', self.disconnectHandler)
-        self.socket.on('entities', self.entitiesHandler)
-        self.socket.on('game_event', self.gameEventHandler)
-        self.socket.on('hit', self.hitHandler)
-        self.socket.on('new_map', self.newMapHandler)
-        self.socket.on('ping_ack', self.pingAckHandler)
-        self.socket.on('server_info', self.serverInfoHandler)
-        self.socket.on('welcome', self.welcomeHandler)
+        self.socket.on('action', self.actionHandlerO)
+        self.socket.on('death', self.deathHandlerO)
+        self.socket.on('disappear', self.disappearHandlerO)
+        self.socket.on('disconnect', self.disconnectHandlerO)
+        self.socket.on('entities', self.entitiesHandlerO)
+        self.socket.on('game_event', self.gameEventHandlerO)
+        self.socket.on('hit', self.hitHandlerO)
+        self.socket.on('new_map', self.newMapHandlerO)
+        self.socket.on('ping_ack', self.pingAckHandlerO)
+        self.socket.on('server_info', self.serverInfoHandlerO)
+        self.socket.on('welcome', self.welcomeHandlerO)
         
         if start:
             async def connectedFn():
@@ -326,7 +326,7 @@ class Observer(object):
             return True
         return False
 
-    def parseEntities(self, data):
+    def parseEntities(self, data: dict):
         if data['type'] == 'all':
             self.lastAllEntities = datetime.utcnow().timestamp()
             
@@ -356,7 +356,7 @@ class Observer(object):
                     if nextUpdate == None or datetime.utcnow().timestamp() >= nextUpdate:
                         updateData = {
                             'hp': e.hp,
-                            'in': e.inst,
+                            'in': getattr(e, 'in'),
                             'lastSeen': datetime.utcnow().timestamp(),
                             'level': e.level,
                             'map': e.map,
@@ -419,7 +419,7 @@ class Observer(object):
                         ))
                     else:
                         updateData = {
-                            'in': p.inst,
+                            'in': getattr(p, 'in'),
                             'lastSeen': datetime.utcnow().timestamp(),
                             'map': p.map,
                             'rip': p.rip,
@@ -487,7 +487,7 @@ class Observer(object):
                     logger.debug(results)
         return
 
-    def parseNewMap(self, data):
+    def parseNewMap(self, data: dict):
         self.projectiles.clear()
         self.x = data['x']
         self.y = data['y']

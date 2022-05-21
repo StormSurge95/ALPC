@@ -12,7 +12,7 @@ class Player(object):
     def __init__(self, data: dict, map: str, instance: str, g: dict):
         self.G = g
         self.map = map
-        self.inst = instance
+        setattr(self, 'in', instance)
         self.logger = logging.getLogger('Player')
         handler = logging.StreamHandler()
         handler.setLevel(logging.INFO)
@@ -22,6 +22,12 @@ class Player(object):
             self.damage_type = self.G['classes'][data['ctype']]['damage_type']
 
         self.updateData(data)
+
+    def __dir__(self):
+        attNames = super().__dir__()
+        attTypes = [type(getattr(self, name)) for name in attNames]
+        ret = list(zip(attNames, attTypes))
+        return ret
 
     def updateData(self, data: dict):
         if hasattr(self, 'id') and self.id != data['id']:

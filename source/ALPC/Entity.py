@@ -6,7 +6,7 @@ class Entity:
         self.max_hp = G['monsters'][data['type']]['hp']
         self.max_mp = G['monsters'][data['type']]['mp']
         self.map = map
-        self.inst = instance
+        setattr(self, 'in', instance)
         self.moving = False
         self.cooperative = False
         
@@ -62,6 +62,12 @@ class Entity:
 
     def __getitem__(self, key: str):
         return getattr(self, key)
+
+    def get(self, key):
+        try:
+            return getattr(self, key)
+        except:
+            return None
 
     def calculateDamageRange(self, defender) -> list:
         if getattr(defender, '1hp', False):

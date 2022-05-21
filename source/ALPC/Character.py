@@ -1,10 +1,11 @@
+from ctypes import Union
 from functools import reduce
 import logging
 from pprint import pprint
+from urllib.parse import _NetlocResultMixinBytes
 import pymongo
 from .database import Database
 from .Observer import Observer
-from .Player import Player
 from .Entity import Entity
 from .Tools import Tools
 from .Constants import Constants
@@ -17,32 +18,120 @@ import math
 
 class Character(Observer):
 
-    def __init__(self, userID: str, userAuth: str, characterID: str, g: dict, serverData: dict, log: bool = False):
-        self.logger = logging.getLogger(characterID)
+    def __init__(self, userID, userAuth, characterID, g, serverData, log = False):
+        self.achievements: dict = {}
+        self.acx: dict = {}
+        self.afk: str = ''
+        self.age: int = 0
+        self.apiercing: int = 0
+        self.armor: int = 0
+        self.attack: int = 0
+        self.base_gold: dict[str, dict[str, int]] = {}
+        self.blast: int = 0
+        self.c: dict = {}
+        self.cash: int = 0
+        self.cc: int = 0
+        self.characterID: str = characterID
+        self.chests: dict = {}
+        self.cid: int = 0
+        self.controller: str = ''
+        self.courage: int = 0
+        self.crit: int = 0
+        self.critdamage: int = 0
+        self.ctype: str = ''
+        self.cx: dict[str, str] = {}
+        self.damage_type: str = ''
+        self.dex: int = 0
+        self.dreturn: int = 0
+        self.emx: dict = {}
+        self.esize: int = 0
+        self.evasion: int = 0
+        self.explosion: int = 0
+        self.fear: int = 0
+        self.firesistance: int = 0
+        setattr(self, 'for', 0)
+        self.frequency: float = 0.0
+        self.friends: list = []
+        self.fzresistance: int = 0
+        self.going_x: int = 0
+        self.going_y: int = 0
+        self.gold: int = 0
+        self.goldm: float = 0.0
+        self.hp: int = 0
+        self.id: str = ''
+        setattr(self, 'in', '')
+        self.info: dict = {}
+        self.int: int = 0
+        self.ipass: str = ''
+        self.isize: int = 0
+        self.items: list = []
+        self.lastSmartMove: float = datetime.utcnow().timestamp()
+        self.level: int = 0
+        self.lifesteal: int = 0
+        self.luckm: float = 0.0
+        self.m: int = 0
+        self.manasteal: int = 0
+        self.map: str = ''
+        self.max_hp: int = 0
+        self.max_mp: int = 0
+        self.max_xp: int = 0
+        self.mcourage: int = 0
+        self.moving: bool = False
+        self.mp: int = 0
+        self.mp_cost: int = 0
+        self.mp_reduction: int = 0
+        self.name: str = ''
+        self.nextSkill: dict[str, float] = {}
+        self.owner: str = userID
+        self.partyData: dict = {}
+        self.pcourage: int = 0
+        self.pdps: int = 0
+        self.pnresistance: int = 0
+        self.q: dict = {}
+        self.range: int = 0
+        self.ready: bool = False
+        self.reflection: int = 0
+        self.resistance: int = 0
+        self.rip: bool = False
+        self.rpiercing: int = 0
+        self.s: dict[str, dict[str, str | int | float]] = {}
+        self.s_info: dict[str, dict[str, int | float | str | bool]] = {}
+        self.skin: str = ''
+        self.slots: dict[str, dict[str, str | int] | None] = {}
+        self.smartMoving: dict = {}
+        self.speed: int = 0
+        self.stand: bool = False
+        self.str: int = 0
+        self.stun: int = 0
+        self.targets: int = 0
+        self.tax: float = 0.0
+        self.timeouts: dict[str, asyncio.Task] = {}
+        self.user: dict[str, int | list] = {'gold': 0}
+        self.userAuth: str = userAuth
+        self.vit: int = 0
+        self.xcx: list = []
+        self.xp: int = 0
+        self.xpm: float = 0.0
+        self.xrange: int = 0
+        super().__init__(serverData, g, log=log)
+        self.logger = logging.getLogger(self.name)
         handler = logging.StreamHandler()
         handler.setLevel(logging.DEBUG)
         handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
         self.logger.addHandler(handler)
-        self.owner = userID
-        self.userAuth = userAuth
-        self.characterID = characterID
-        self.ready = False
-        self.partyData = None
-        self.nextSkill = {}
-        self.chests = {}
-        self.user = {'gold': 0}
-        self.achievements = {}
-        self.timeouts = {}
-        self.lastSmartMove = datetime.utcnow().timestamp()
-        self.smartMoving = None
-        super().__init__(serverData, g, log=log)
         return
 
     @property
-    def bank(self):
+    def bank(self) -> dict[str, int | list]:
         return self.user
 
-    async def updateLoop(self) -> None:
+    def __dir__(self):
+        attNames = super().__dir__()
+        attTypes = [type(getattr(self, name)) for name in attNames]
+        ret = list(zip(attNames, attTypes))
+        return ret
+
+    async def updateLoop(self):
         if (not bool(self.socket)) or (not self.socket.connected) or (not self.ready):
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S)
             return
@@ -64,7 +153,7 @@ class Character(Observer):
             self.timeouts['updateLoop'] = Tools.setTimeout(self.updateLoop, Constants.UPDATE_POSITIONS_EVERY_S - sSinceLastUpdate)
             return
 
-    def parseCharacter(self, data) -> None:
+    def parseCharacter(self, data):
         self.updatePositions()
         for datum in list(data):
             if datum == 'hitchhikers':
@@ -79,7 +168,7 @@ class Character(Observer):
                 pass
             elif datum == 'tp':
                 pass
-            elif datum == 'user':
+            elif datum == 'user' and data['user'] != None:
                 self.user = data['user']
 
                 if Database.connection != None:
@@ -89,14 +178,12 @@ class Character(Observer):
                         **data['user']
                     }
                     Database.connection.ALPC.banks.update_one({ 'owner': self.owner }, { "$set": updateData }, upsert=True)
-                
-                pprint(self.bank)
             else:
                 setattr(self, datum, data[datum])
         self.name = data['id']
         if not hasattr(self, 'party'):
             self.partyData = None
-        if (not hasattr(self, 'damage_type')) and hasattr(self, 'ctype'):
+        if self.damage_type == '' and hasattr(self, 'ctype'):
             self.damage_type = self.G['classes'][self.ctype]['damage_type']
         if Database.connection != None:
             key = f"{self.serverData['name']}{self.serverData['region']}{self.id}"
@@ -120,7 +207,7 @@ class Character(Observer):
                 Database.nextUpdate[key] = datetime.utcnow().timestamp() + Constants.MONGO_UPDATE_S
         return
 
-    def parseEntities(self, data) -> None:
+    def parseEntities(self, data):
         if hasattr(self, 'party'):
             for i in range(0, len(data['players'])):
                 player = data['players'][i]
@@ -141,13 +228,13 @@ class Character(Observer):
         super().parseEntities(data)
         return
 
-    def parseEval(self, data) -> None:
+    def parseEval(self, data):
         skillReg = re.search("^skill_timeout\s*\(\s*['\"](.+?)['\"]\s*,?\s*(\d+\.?\d+?)?\s*\)", data['code'])
         if skillReg is not None:
             skill = skillReg.group(1)
             cooldown = None
             if skillReg.group(2):
-                cooldown = float(skillReg.group(2))
+                cooldown = float(skillReg.group(2)) / 1000
             if cooldown is not None:
                 next = datetime.utcnow().timestamp() + cooldown
                 self.setNextSkill(skill, next)
@@ -155,12 +242,10 @@ class Character(Observer):
         
         potReg = re.search("^pot_timeout\s*\(\s*(\d*\.?\d+)\s*\)", data['code'])
         if potReg is not None:
-            cooldown = float(potReg.group(1))
+            cooldown = float(potReg.group(1)) / 1000
             next = datetime.utcnow().timestamp() + cooldown
             self.setNextSkill('regen_hp', next)
             self.setNextSkill('regen_mp', next)
-            self.setNextSkill('use_hp', next)
-            self.setNextSkill('use_mp', next)
             return
 
         uiMoveReg = re.search("^ui_move\s*\(\s*(-?\d*\.{0,1}\d+)\s*,\s*(-?\d*\.{0,1}\d+)\s*\)", data['code'])
@@ -174,7 +259,7 @@ class Character(Observer):
         print(f'Unhandled \'eval\': {str(data)}')
         return
 
-    def parseGameResponse(self, data) -> None:
+    def parseGameResponse(self, data):
         if isinstance(data, dict):
             if data['response'] == 'cooldown':
                 skill = data.get('skill', data.get('place', None))
@@ -193,7 +278,7 @@ class Character(Observer):
                     'x': self.x,
                     'y': self.y
                 })
-            elif data['response'] == 'ex_condition':
+            elif data['response'] == 'ex_condition' and data['name'] in self.s:
                 del self.s[data['name']]
             elif data['response'] == 'skill_success':
                 cooldown = self.G['skills'][data['name']]['cooldown']
@@ -204,7 +289,7 @@ class Character(Observer):
                 pass # ignore. We resolve our skills a different way than the vanilla client
         return
 
-    def parseNewMap(self, data) -> None:
+    def parseNewMap(self, data):
         setattr(self, 'going_x', data['x'])
         setattr(self, 'going_y', data['y'])
         setattr(self, 'in', data['in'])
@@ -214,20 +299,20 @@ class Character(Observer):
         super().parseNewMap(data)
         return
 
-    def parseQData(self, data) -> None:
-        if data.get('q', None).get('upgrade', False):
+    def parseQData(self, data: dict):
+        if data.get('q', {}).get('upgrade') != None:
             self.q['upgrade'] = data['q']['upgrade']
-        if data.get('q', None).get('compound', False):
+        if data.get('q', {}).get('compound') != None:
             self.q['compound'] = data['q']['compound']
         return
 
-    def setNextSkill(self, skill: str, next: datetime) -> None:
+    def setNextSkill(self, skill, next):
         self.nextSkill[skill] = next
-        if self.G['skills'][skill].get('share', False):
+        if self.G['skills'][skill].get('share') != None:
             self.nextSkill[self.G['skills'][skill]['share']] = next
         return
 
-    def updatePositions(self) -> None:
+    def updatePositions(self):
         if getattr(self, 'lastPositionUpdate'):
             msSinceLastUpdate = (datetime.utcnow().timestamp() - self.lastPositionUpdate) * 1000
             if msSinceLastUpdate == 0:
@@ -255,48 +340,48 @@ class Character(Observer):
         super().updatePositions()
         return
 
-    def disconnectHandler(self) -> None:
+    def disconnectHandlerC(self):
         self.ready = False
         return
 
-    def disconnectReasonHandler(self, data = None) -> None:
+    def disconnectReasonHandlerC(self, data = None):
         self.ready = False
         return
 
-    def friendHandler(self, data) -> None:
+    def friendHandlerC(self, data):
         if data['event'] in ['lost', 'new', 'update']:
             self.friends = data['friends']
         return
 
-    def startHandler(self, data) -> None:
+    def startHandlerC(self, data: dict):
         self.going_x = data['x']
         self.going_y = data['y']
         self.moving = False
         self.damage_type = self.G['classes'][data['ctype']]['damage_type']
         self.parseCharacter(data)
-        if data.get('entities', False):
+        if data.get('entities') != None:
             self.parseEntities(data['entities'])
         self.S = data['s_info']
         self.ready = True
         return
 
-    def achievementProgressHandler(self, data) -> None:
+    def achievementProgressHandlerC(self, data):
         self.achievements[data['name']] = data
         return
 
-    def chestOpenedHandler(self, data) -> None:
+    def chestOpenedHandlerC(self, data):
         del self.chests[data['id']]
         return
 
-    def dropHandler(self, data) -> None:
+    def dropHandlerC(self, data):
         self.chests[data['id']] = data
         return
 
-    def evalHandler(self, data) -> None:
+    def evalHandlerC(self, data):
         self.parseEval(data)
         return
 
-    def gameErrorHandler(self, data) -> None:
+    def gameErrorHandlerC(self, data):
         if isinstance(data, str):
             print(f'Game Error:\n{data}')
         else:
@@ -304,7 +389,7 @@ class Character(Observer):
             print(str(data))
         return
 
-    def gameLogHandler(self, data):
+    def gameLogHandlerC(self, data):
         if not isinstance(data, dict): return
         match = re.search('^Slain by (.+)$', data['message'])
         if match != None:
@@ -319,11 +404,11 @@ class Character(Observer):
                 'y': self.y
             })
 
-    def gameResponseHandler(self, data) -> None:
+    def gameResponseHandlerC(self, data):
         self.parseGameResponse(data)
         return
 
-    def partyUpdateHandler(self, data = None) -> None:
+    def partyUpdateHandlerC(self, data = None):
         self.partyData = data
 
         if data != None and Database.connection != None:
@@ -350,15 +435,15 @@ class Character(Observer):
                 Database.connection.ALPC.players.bulk_write(playerUpdates)
         return
 
-    def playerHandler(self, data) -> None:
+    def playerHandlerC(self, data):
         self.parseCharacter(data)
         return
 
-    def qDataHandler(self, data) -> None:
+    def qDataHandlerC(self, data):
         self.parseQData(data)
         return
 
-    def trackerHandler(self, data):
+    def trackerHandlerC(self, data):
         for monsterName in data['max']['monsters']:
             characterKills = data['monsters'].get(monsterName, 0)
             maxData = data['max']['monsters'][monsterName]
@@ -374,39 +459,39 @@ class Character(Observer):
             'name': self.id
         })
 
-    def upgradeHandler(self, data) -> None:
+    def upgradeHandlerC(self, data):
         if data['type'] == 'compound' and getattr(self, 'q', {}).get('compound', False):
             del self.q['compound']
         elif data['type'] == 'upgrade' and getattr(self, 'q', {}).get('upgrade', False):
             del self.q['upgrade']
         return
 
-    async def welcomeHandler(self, data) -> None:
+    async def welcomeHandlerC(self, data):
         await self.socket.emit('loaded', {'height': 1080, 'scale': 2, 'success': 1, 'width': 1920})
         await self.socket.emit('auth', {'auth': self.userAuth, 'character': self.characterID, 'height': 1080, 'no_graphics': 'True', 'no_html': '1', 'passphrase': '', 'scale': 2, 'user': self.owner, 'width': 1920})
         return
 
-    async def connect(self) -> bool | None:
+    async def connect(self):
         await super(Character, self).connect(False, False)
 
-        self.socket.on('disconnect', self.disconnectHandler)
-        self.socket.on('disconnect_reason', self.disconnectReasonHandler)
-        self.socket.on('friend', self.friendHandler)
-        self.socket.on('start', self.startHandler)
-        self.socket.on('achievement_progress', self.achievementProgressHandler)
-        self.socket.on('chest_opened', self.chestOpenedHandler)
-        self.socket.on('drop', self.dropHandler)
-        self.socket.on('eval', self.evalHandler)
-        self.socket.on('game_error', self.gameErrorHandler)
-        self.socket.on('game_response', self.gameResponseHandler)
-        self.socket.on('party_update', self.partyUpdateHandler)
-        self.socket.on('player', self.playerHandler)
-        self.socket.on('q_data', self.qDataHandler)
-        self.socket.on('upgrade', self.upgradeHandler)
-        self.socket.on('welcome', self.welcomeHandler)
+        self.socket.on('disconnect', self.disconnectHandlerC)
+        self.socket.on('disconnect_reason', self.disconnectReasonHandlerC)
+        self.socket.on('friend', self.friendHandlerC)
+        self.socket.on('start', self.startHandlerC)
+        self.socket.on('achievement_progress', self.achievementProgressHandlerC)
+        self.socket.on('chest_opened', self.chestOpenedHandlerC)
+        self.socket.on('drop', self.dropHandlerC)
+        self.socket.on('eval', self.evalHandlerC)
+        self.socket.on('game_error', self.gameErrorHandlerC)
+        self.socket.on('game_response', self.gameResponseHandlerC)
+        self.socket.on('party_update', self.partyUpdateHandlerC)
+        self.socket.on('player', self.playerHandlerC)
+        self.socket.on('q_data', self.qDataHandlerC)
+        self.socket.on('upgrade', self.upgradeHandlerC)
+        self.socket.on('welcome', self.welcomeHandlerC)
         if Database.connection != None:
-            self.socket.on('game_log', self.gameLogHandler)
-            self.socket.on('tracker', self.trackerHandler)
+            self.socket.on('game_log', self.gameLogHandlerC)
+            self.socket.on('tracker', self.trackerHandlerC)
 
         async def connectedFn():
             connected = asyncio.get_event_loop().create_future()
@@ -444,7 +529,7 @@ class Character(Observer):
 
         return await Tools.tryExcept(connectedFn)
 
-    async def disconnect(self) -> None:
+    async def disconnect(self):
         self.logger.debug('Disconnecting!')
 
         if self.socket:
@@ -456,7 +541,7 @@ class Character(Observer):
             Tools.clearTimeout(timer)
         return
 
-    async def requestEntitiesData(self) -> dict | None:
+    async def requestEntitiesData(self):
         async def entitiesDataFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [requestEntitiesData]")
@@ -483,7 +568,7 @@ class Character(Observer):
             return entitiesData.result()
         return await Tools.tryExcept(entitiesDataFn)
 
-    async def requestPlayerData(self) -> dict | None:
+    async def requestPlayerData(self):
         async def playerDataFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [requestPlayerData]")
@@ -492,7 +577,7 @@ class Character(Observer):
                 if not playerData.done():
                     self.socket.off('player', checkPlayerEvent)
                     playerData.set_result(value)
-            def checkPlayerEvent(data):
+            def checkPlayerEvent(data: dict):
                 if data.get('s', {}).get('typing', False):
                     resolve(data)
 
@@ -510,7 +595,7 @@ class Character(Observer):
 
         return await Tools.tryExcept(playerDataFn)
 
-    async def acceptFriendRequest(self, id: str) -> dict | None:
+    async def acceptFriendRequest(self, id):
         async def friendReqFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [acceptFriendRequest].")
@@ -546,7 +631,7 @@ class Character(Observer):
 
         return await Tools.tryExcept(friendReqFn)
 
-    async def acceptMagiport(self, name: str) -> dict | None:
+    async def acceptMagiport(self, name):
         async def magiportFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [acceptMagiport].")
@@ -572,13 +657,13 @@ class Character(Observer):
 
         return await Tools.tryExcept(magiportFn)
        
-    async def acceptPartyInvite(self, id: str) -> dict | None:
+    async def acceptPartyInvite(self, id):
         async def partyInvFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [acceptPartyInvite].")
             acceptedInvite = asyncio.get_event_loop().create_future()
-            def partyCheck(data):
-                if (Tools.hasKey(data, 'list')) and (Tools.hasKey(data['list'], self.id)) and (Tools.hasKey(data['list'], id)):
+            def partyCheck(data: dict[str, dict]):
+                if data.get('list') != None and data['list'].get(self.id) != None and data['list'].get(id) != None:
                     resolve(data)
             
             def unableCheck(data):
@@ -603,7 +688,7 @@ class Character(Observer):
                     self.socket.off('game_log', unableCheck)
                     acceptedInvite.set_result(value)
             
-            Tools.setTimeout(reject, Constants.Timeout, f'acceptPartyInvite timeout ({Constants.TIMEOUT}s)')
+            Tools.setTimeout(reject, Constants.TIMEOUT, f'acceptPartyInvite timeout ({Constants.TIMEOUT}s)')
             self.socket.on('party_update', partyCheck)
             self.socket.on('game_log', unableCheck)
             await self.socket.emit('party', { 'event': 'accept', 'name': id })
@@ -613,13 +698,13 @@ class Character(Observer):
 
         return await Tools.tryExcept(partyInvFn)
 
-    async def acceptPartyRequest(self, id: str) -> dict | None:
+    async def acceptPartyRequest(self, id):
         async def partyReqFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [acceptPartyRequest].")
             acceptedRequest = asyncio.get_event_loop().create_future()
-            def partyCheck(data):
-                if (data.get('list', False)) and (self.id in data['list']) and (id in data['list']):
+            def partyCheck(data: dict):
+                if (data.get('list') != None) and (self.id in data['list']) and (id in data['list']):
                     resolve(data)
                 
             def reject(reason):
@@ -640,7 +725,7 @@ class Character(Observer):
         
         return await Tools.tryExcept(partyReqFn)
 
-    async def basicAttack(self, id: str) -> str | None:
+    async def basicAttack(self, id):
         async def attackFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [basicAttack].")
@@ -695,7 +780,7 @@ class Character(Observer):
             return attackStarted.result()
         return await Tools.tryExcept(attackFn)
 
-    async def buy(self, itemName: str, quantity: int = 1) -> int | None:
+    async def buy(self, itemName, quantity = 1):
         async def buyFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [buy]")
@@ -712,8 +797,8 @@ class Character(Observer):
                     self.socket.off('player', buyCheck1)
                     self.socket.off('game_response', buyCheck2)
                     itemReceived.set_result(value)
-            def buyCheck1(data):
-                if not data.get('hitchhikers', False):
+            def buyCheck1(data: dict[str, dict]):
+                if data.get('hitchhikers') == None:
                     return
                 for hitchhiker in data['hitchhikers'].values():
                     if hitchhiker[0] == 'game_response':
@@ -741,7 +826,7 @@ class Character(Observer):
             return itemReceived.result()
         return await Tools.tryExcept(buyFn)
 
-    async def buyWithTokens(self, itemName: str) -> None:
+    async def buyWithTokens(self, itemName):
         async def tokenBuyFn():
             numBefore = self.countItem(itemName)
 
@@ -792,19 +877,19 @@ class Character(Observer):
             return itemReceived.result()
         return await Tools.tryExcept(tokenBuyFn)
 
-    async def buyFromMerchant(self, id: str, slot: str, rid: str, quantity: int = 1) -> dict | None:
+    async def buyFromMerchant(self, id, slot, rid, quantity = 1):
         async def merchantBuyFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [buyFromMerchant].")
             if quantity <= 0:
                 raise Exception(f"We can not buy a quantity of {quantity}.")
-            merchant = self.players.get(id, False)
-            if not merchant:
+            merchant = self.players.get(id)
+            if merchant == None:
                 raise Exception(f"We can not see {id} nearby.")
             if Tools.distance(self, merchant) > Constants.NPC_INTERACTION_DISTANCE:
                 raise Exception(f"We are too far away from {id} to buy from.")
             
-            item = merchant.slots.get(slot, False)
+            item: dict = merchant.slots.get(slot, False)
             if not item:
                 raise Exception(f"We could not find an item in slot {slot} on {id}.")
             if item.get('b', False):
@@ -845,7 +930,7 @@ class Character(Observer):
             return itemBought.result()
         return await Tools.tryExcept(merchantBuyFn)
 
-    async def buyFromPonty(self, item: dict) -> None:
+    async def buyFromPonty(self, item: dict):
         async def pontyBuyFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [buyFromPonty].")
@@ -873,7 +958,7 @@ class Character(Observer):
                     reject(f"{item['name']} is no longer available from Ponty.")
             def successCheck(data):
                 numNow = self.countItem(item['name'], data['items'])
-                if ((Tools.hasKey(item, 'q')) and (numNow == numBefore + item['q'])) or (numNow == numBefore + 1):
+                if ((item.get('q') != None) and (numNow == numBefore + item['q'])) or (numNow == numBefore + 1):
                     resolve(None)
             Tools.setTimeout(reject, Constants.TIMEOUT * 5, f"buyFromPonty timeout ({Constants.TIMEOUT * 5}s)")
             self.socket.on('game_log', failCheck)
@@ -884,7 +969,7 @@ class Character(Observer):
             return bought.result()
         return await Tools.tryExcept(pontyBuyFn)
 
-    def calculateTargets(self) -> dict[str, int]:
+    def calculateTargets(self):
         targets = {
             'magical': 0,
             'physical': 0,
@@ -909,13 +994,13 @@ class Character(Observer):
         
         return targets
     
-    def calculateDamageRange(self, defender: 'Character' or Entity or Player, skill: str = 'attack') -> list[int]:
-        gSkill = self.G['skills'].get(skill, None)
+    def calculateDamageRange(self, defender, skill = 'attack'):
+        gSkill: dict = self.G['skills'].get(skill)
 
         if gSkill == None:
             raise Exception(f"calculateDamageRange ERROR: '{skill}' isn't a skill!?")
 
-        if hasattr(defender, 'immune') and (skill != 'attack') and (not (Tools.hasKey(gSkill, 'pierces_immunity'))):
+        if hasattr(defender, 'immune') and (skill != 'attack') and (gSkill.get('pierces_immunity') == None):
             return [0, 0]
         
         if (hasattr(defender, '1hp')) or (skill == 'taunt'):
@@ -925,12 +1010,12 @@ class Character(Observer):
                 return [1, 1]
         
         baseDamage = self.attack
-        if Tools.hasKey(gSkill, 'damage'):
+        if gSkill.get('damage') != None:
             baseDamage = gSkill['damage']
         
-        if hasattr(defender, 's') and Tools.hasKey(defender.s, 'cursed'):
+        if hasattr(defender, 's') and defender.s.get('cursed') != None:
             baseDamage *= 1.2
-        if hasattr(defender, 's') and Tools.hasKey(defender.s, 'marked'):
+        if hasattr(defender, 's') and defender.s.get('marked') != None:
             baseDamage *= 1.1
 
         if self.ctype == 'priest':
@@ -939,14 +1024,14 @@ class Character(Observer):
         damage_type = gSkill.get('damage_type', self.damage_type)
 
         additionalApiercing = 0
-        if Tools.hasKey(gSkill, 'apiercing'):
+        if gSkill.get('apiercing') != None:
             additionalApiercing = gSkill['apiercing']
         if damage_type == 'physical':
             baseDamage *= Tools.damage_multiplier(defender.armor - self.apiercing - additionalApiercing)
         elif damage_type == 'magical':
             baseDamage *= Tools.damage_multiplier(defender.resistance - self.rpiercing)
         
-        if Tools.hasKey(gSkill, 'damage_multiplier'):
+        if gSkill.get('damage_multiplier') != None:
             baseDamage *= gSkill['damage_multiplier']
         
         lowerLimit = baseDamage * 0.9
@@ -966,12 +1051,12 @@ class Character(Observer):
         
         return [lowerLimit, upperLimit]
 
-    def calculateItemCost(self, item: dict) -> int:
-        gInfo = self.G['items'][item['name']]
+    def calculateItemCost(self, item):
+        gInfo: dict = self.G['items'][item['name']]
 
         cost = gInfo['g']
 
-        if Tools.hasKey(gInfo, 'compound'):
+        if gInfo.get('compound') != None:
             for i in range(0, int(item['level'])):
                 cost *= 3
                 scrollLevel = 0
@@ -981,7 +1066,7 @@ class Character(Observer):
                         cost += scrollInfo['g']
                         break
                     scrollLevel += 1
-        elif Tools.hasKey(gInfo, 'upgrade'):
+        elif gInfo.get('upgrade') != None:
             for i in range(0, int(item['level'])):
                 scrollLevel = 0
                 for grade in gInfo['grades']:
@@ -991,14 +1076,14 @@ class Character(Observer):
                         break
                     scrollLevel += 1
         
-        if Tools.hasKey(item, 'gift'):
+        if item.get('gift') != None:
             cost -= (gInfo['g'] - 1)
         
         return cost
 
-    def calculateItemGrade(self, item: dict) -> int:
-        gInfo = self.G['items'][item['name']]
-        if not Tools.hasKey(gInfo, 'grades'):
+    def calculateItemGrade(self, item):
+        gInfo: dict = self.G['items'][item['name']]
+        if gInfo.get('grades') != None:
             return
         grade = 0
         for level in gInfo['grades']:
@@ -1007,7 +1092,7 @@ class Character(Observer):
             grade += 1
         return grade
 
-    def canBuy(self, item: str, ignoreLocation: bool = False) -> bool:
+    def canBuy(self, item, ignoreLocation = False):
         if self.isFull():
             return False # Not enough inv space
         
@@ -1042,7 +1127,7 @@ class Character(Observer):
         
         return (computerAvailable or close or ignoreLocation)
     
-    def canCraft(self, itemToCraft: str, ignoreLocation: bool = False) -> bool:
+    def canCraft(self, itemToCraft, ignoreLocation = False):
         gCraft = self.G['craft'].get(itemToCraft, False)
         if not gCraft:
             print('Item not craftable')
@@ -1081,7 +1166,7 @@ class Character(Observer):
             print('We can craft!')
             return True
     
-    def canExchange(self, itemToExchange: str, ignoreLocation: bool = False) -> bool:
+    def canExchange(self, itemToExchange, ignoreLocation = False):
         gItem = self.G['items'][itemToExchange]
         if (Tools.hasKey(gItem, 'e')) and (self.countItem(itemToExchange) < gItem['e']):
             return False # Not enough of item
@@ -1092,7 +1177,7 @@ class Character(Observer):
         
         return True
     
-    def canKillInOneShot(self, entity: Entity, skill: str = 'attack') -> bool:
+    def canKillInOneShot(self, entity, skill = 'attack'):
         if Tools.hasKey(entity, 'lifesteal'):
             return False
         if Tools.hasKey(entity, 'abilities') and Tools.hasKey(entity['abilities'], 'self_healing'):
@@ -1109,7 +1194,7 @@ class Character(Observer):
         
         return self.calculateDamageRange(entity, skill)[0] >= entity.hp
     
-    def canSell(self) -> bool:
+    def canSell(self):
         if (self.map in ['bank', 'bank_b', 'bank_u']):
             return False # can't sell in the bank
         if (self.hasItem('computer')) or (self.hasItem('supercomputer')):
@@ -1126,7 +1211,7 @@ class Character(Observer):
         
         return False
     
-    def canUpgrade(self, itemPos: int, scrollPos: int, offeringPos: int = -1) -> bool:
+    def canUpgrade(self, itemPos, scrollPos, offeringPos = -1):
         if self.map in ['bank', 'bank_b', 'bank_u']:
             return False # Can't upgrade in the bank
         if itemPos < 0 or itemPos > 42:
@@ -1164,7 +1249,7 @@ class Character(Observer):
         
         return True
 
-    def canUse(self, skill: str, *, ignoreCooldown: bool = False, ignoreEquipped: bool = False) -> bool:
+    def canUse(self, skill, *, ignoreCooldown = False, ignoreEquipped = False):
         if self.rip:
             return False # We're dead lol
         for conditionName in self.s:
@@ -1250,7 +1335,7 @@ class Character(Observer):
             return closed.result()
         return await Tools.tryExcept(closeFn)
 
-    async def compound(self, item1Pos: int, item2Pos: int, item3Pos: int, cscrollPos: int, offeringPos: int = None) -> bool | None:
+    async def compound(self, item1Pos, item2Pos, item3Pos, cscrollPos, offeringPos = None):
         async def compoundFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [compound].")
@@ -1318,7 +1403,7 @@ class Character(Observer):
         
         return await Tools.tryExcept(compoundFn)
 
-    async def craft(self, item: str) -> None:
+    async def craft(self, item):
         async def craftedFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [craft].")
@@ -1369,7 +1454,7 @@ class Character(Observer):
             return crafted.result()    
         return await Tools.tryExcept(craftedFn)
 
-    async def depositGold(self, gold: int) -> None:
+    async def depositGold(self, gold):
         async def goldFn():
             nonlocal self
             nonlocal gold
@@ -1387,7 +1472,7 @@ class Character(Observer):
             await self.socket.emit('bank', { 'amount': gold, 'operation': 'deposit' })
         return await Tools.tryExcept(goldFn)
     
-    async def depositItem(self, inventoryPos: int, bankPack: str = None, bankSlot: int = -1) -> None:
+    async def depositItem(self, inventoryPos, bankPack = None, bankSlot = -1):
         async def swapFn():
             nonlocal self
             nonlocal inventoryPos
@@ -1483,7 +1568,7 @@ class Character(Observer):
             return swapped.result()
         return await Tools.tryExcept(swapFn)
 
-    async def emote(self, emotionName) -> None:
+    async def emote(self, emotionName):
         async def emoteFn():
             nonlocal self
             nonlocal emotionName
@@ -1520,7 +1605,7 @@ class Character(Observer):
             return emoted.result()
         return await Tools.tryExcept(emoteFn)
 
-    async def enter(self, map: str, instance: str = None):
+    async def enter(self, map, instance = None):
         async def enterFn():
             nonlocal self
             nonlocal map
@@ -1571,7 +1656,7 @@ class Character(Observer):
             return enterComplete.result()
         return await Tools.tryExcept(enterFn)
 
-    async def equip(self, inventoryPos, equipSlot = None) -> None:
+    async def equip(self, inventoryPos, equipSlot = None):
         async def equipFn():
             nonlocal self
             nonlocal inventoryPos
@@ -1615,7 +1700,7 @@ class Character(Observer):
         
         return await Tools.tryExcept(equipFn)
 
-    async def exchange(self, inventoryPos: int) -> None:
+    async def exchange(self, inventoryPos):
         async def exchangeFn():
             nonlocal self
             nonlocal inventoryPos
@@ -1701,7 +1786,7 @@ class Character(Observer):
             return questFinished.result()
         return await Tools.tryExcept(questFn)
 
-    def getEntities(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None) -> list[Entity]:
+    def getEntities(self, *, canDamage = None, canWalkTo = None, couldGiveCredit = None, withinRange = None, targetingMe = None, targetingPartyMember = None, targetingPlayer = None, type = None, typeList = None, level = None, levelGreaterThan = None, levelLessThan = None, willBurnToDeath = None, willDieToProjectiles = None):
         entities = []
         for entity in self.entities.values():
             if targetingMe != None:
@@ -1752,7 +1837,7 @@ class Character(Observer):
             entities.append(entity)
         return entities
 
-    def getEntity(self, *, canDamage: bool = None, canWalkTo: bool = None, couldGiveCredit: bool = None, withinRange: bool = None, targetingMe: bool = None, targetingPartyMember: bool = None, targetingPlayer: str = None, type: str = None, typeList: list[str] = None, level: int = None, levelGreaterThan: int = None, levelLessThan: int = None, willBurnToDeath: bool = None, willDieToProjectiles: bool = None, returnHighestHP: bool = None, returnLowestHP: bool = None, returnNearest: bool = None) -> Entity:
+    def getEntity(self, *, canDamage = None, canWalkTo = None, couldGiveCredit = None, withinRange = None, targetingMe = None, targetingPartyMember = None, targetingPlayer = None, type = None, typeList = None, level = None, levelGreaterThan = None, levelLessThan = None, willBurnToDeath = None, willDieToProjectiles = None, returnHighestHP = None, returnLowestHP = None, returnNearest = None):
         ents = self.getEntities(canDamage=canDamage, canWalkTo=canWalkTo, couldGiveCredit=couldGiveCredit, withinRange=withinRange, targetingMe=targetingMe, targetingPartyMember=targetingPartyMember, targetingPlayer=targetingPlayer, type=type, typeList=typeList, level=level, levelGreaterThan=levelGreaterThan, levelLessThan=levelLessThan, willBurnToDeath=willBurnToDeath, willDieToProjectiles=willDieToProjectiles)
 
         numReturnOptions = 0
@@ -1764,7 +1849,7 @@ class Character(Observer):
         if len(ents) == 1 or numReturnOptions == 0: return ents[0]
 
         if returnHighestHP:
-            highest = []
+            highest = None
             highestHP = 0
             for ent in ents:
                 if ent.hp > highestHP:
@@ -1773,7 +1858,7 @@ class Character(Observer):
             return highest
         
         if returnLowestHP:
-            lowest = []
+            lowest = None
             lowestHP = sys.maxsize
             for ent in ents:
                 if ent.hp < lowestHP:
@@ -1782,7 +1867,7 @@ class Character(Observer):
             return lowest
         
         if returnNearest:
-            closest = []
+            closest = None
             closestDistance = sys.maxsize
             for ent in ents:
                 distance = Tools.distance(self, ent)
@@ -1791,7 +1876,7 @@ class Character(Observer):
                     closestDistance = distance
             return closest
     
-    def getFirstEmptyInventorySlot(self, items = None) -> int:
+    def getFirstEmptyInventorySlot(self, items = None):
         if items == None:
             items = self.items
         
@@ -1801,7 +1886,7 @@ class Character(Observer):
                 return i
         return None
 
-    async def getMonsterHuntQuest(self) -> None:
+    async def getMonsterHuntQuest(self):
         async def questFn():
             nonlocal self
             if not self.ready:
@@ -1854,7 +1939,7 @@ class Character(Observer):
             return questGot.result()
         return await Tools.tryExcept(questFn)
 
-    async def getPlayers(self) -> dict:
+    async def getPlayers(self):
         async def playersFn():
             nonlocal self
             if not self.ready: raise Exception("We aren't ready yet [getPlayers].")
@@ -1877,7 +1962,7 @@ class Character(Observer):
             return playersData.result()
         return await Tools.tryExcept(playersFn)
 
-    async def getPontyItems(self) -> list[dict]:
+    async def getPontyItems(self):
         async def pontyFn():
             nonlocal self
             if not self.ready: raise Exception("We aren't ready yet [getPontyItems].")
@@ -1906,10 +1991,10 @@ class Character(Observer):
             return pontyItems.result()
         return await Tools.tryExcept(pontyFn)
 
-    def getTargetEntity(self) -> Entity:
+    def getTargetEntity(self):
         return self.entities.get(self.target)
 
-    async def getTrackerData(self) -> dict:
+    async def getTrackerData(self):
         async def trackerFn():
             nonlocal self
             if not self.ready:
@@ -1935,13 +2020,13 @@ class Character(Observer):
             return gotData.result()
         return await Tools.tryExcept(trackerFn)
 
-    def isFull(self) -> bool:
+    def isFull(self):
         return self.esize == 0
 
-    def isScared(self) -> bool:
+    def isScared(self):
         return self.fear > 0
 
-    async def kickPartyMember(self, toKick: str) -> None:
+    async def kickPartyMember(self, toKick):
         async def kickFn():
             nonlocal self
             nonlocal toKick
@@ -1969,7 +2054,7 @@ class Character(Observer):
             return kicked.result()
         return await Tools.tryExcept(kickFn)
 
-    async def leaveMap(self) -> None:
+    async def leaveMap(self):
         async def leaveFn():
             nonlocal self
             if not self.ready: raise Exception("We aren't ready yet [leaveMap].")
@@ -2000,7 +2085,7 @@ class Character(Observer):
             return leaveComplete.result()
         return await Tools.tryExcept(leaveFn)
 
-    async def leaveParty(self) -> None:
+    async def leaveParty(self):
         async def leaveFn():
             nonlocal self
             if not self.ready: raise Exception("We aren't ready yet [leaveParty].")
@@ -2008,7 +2093,7 @@ class Character(Observer):
             return
         return await Tools.tryExcept(leaveFn)
             
-    async def move(self, x: int, y: int, *, disableSafetyCheck: bool = False, resolveOnStart: bool = False) -> dict[str, int|str]:
+    async def move(self, x, y, *, disableSafetyCheck = False, resolveOnStart = False):
         async def moveFn():
             nonlocal self
             nonlocal x
@@ -2084,7 +2169,7 @@ class Character(Observer):
 
         return await Tools.tryExcept(moveFn)
 
-    async def openChest(self, id: str) -> dict:
+    async def openChest(self, id):
         async def chestFn():
             nonlocal self
             nonlocal id
@@ -2109,7 +2194,7 @@ class Character(Observer):
             return chestOpened.result()
         return await Tools.tryExcept(chestFn)
 
-    async def openMerchantStand(self) -> None:
+    async def openMerchantStand(self):
         async def standFn():
             if not self.ready: raise Exception("We aren't ready yet [openMerchantStand].")
             if self.stand: return
@@ -2139,7 +2224,7 @@ class Character(Observer):
             return opened.result()
         return await Tools.tryExcept(standFn)
 
-    async def regenHP(self) -> None:
+    async def regenHP(self):
         async def regenHPFn():
             nonlocal self
             if not self.ready:
@@ -2170,7 +2255,7 @@ class Character(Observer):
             return regenReceived.result()
         return await Tools.tryExcept(regenHPFn)
 
-    async def regenMP(self) -> None:
+    async def regenMP(self):
         async def regenMPFn():
             nonlocal self
             if not self.ready:
@@ -2201,7 +2286,7 @@ class Character(Observer):
             return regenReceived.result()
         return await Tools.tryExcept(regenMPFn)
 
-    async def respawn(self, safe: bool = False):
+    async def respawn(self, safe = False):
         async def respawnFn():
             nonlocal self
             if not self.ready:
@@ -2232,7 +2317,7 @@ class Character(Observer):
             return respawned.result()
         return await Tools.tryExcept(respawnFn)
 
-    async def scare(self) -> list[str]:
+    async def scare(self):
         async def scareFn():
             nonlocal self
             if not self.ready:
@@ -2276,7 +2361,7 @@ class Character(Observer):
             return scared.result()
         return await Tools.tryExcept(scareFn)
 
-    async def sell(self, itemPos: int, quantity: int = 1) -> bool:
+    async def sell(self, itemPos, quantity = 1):
         async def sellFn():
             nonlocal self
             nonlocal itemPos
@@ -2320,7 +2405,7 @@ class Character(Observer):
             return sold.result()
         return Tools.tryExcept(sellFn)
 
-    async def sellToMerchant(self, id: str, slot: str, rid: str, q: int) -> None:
+    async def sellToMerchant(self, id, slot, rid, q):
         async def sellFn():
             nonlocal self
             nonlocal id
@@ -2375,7 +2460,7 @@ class Character(Observer):
             return sold.result()
         return await Tools.tryExcept(sellFn)
 
-    async def sendCM(self, to: list[str], message: str) -> None:
+    async def sendCM(self, to, message):
         async def cmFn():
             nonlocal self
             nonlocal to
@@ -2385,7 +2470,7 @@ class Character(Observer):
             await self.socket.emit('cm', { 'message': message, 'to': to })
         return await Tools.tryExcept(cmFn)
 
-    async def sendMail(self, to: str, subject: str, message: str, item = False) -> None:
+    async def sendMail(self, to, subject, message, item = False):
         async def mailFn():
             nonlocal self
             nonlocal to
@@ -2395,13 +2480,13 @@ class Character(Observer):
             await self.socket.emit('mail', { 'item': item, 'message': message, 'subject': subject, 'to': to })
         return await Tools.tryExcept(mailFn)
 
-    async def sendPM(self, to: str, message: str) -> bool:
+    async def sendPM(self, to, message):
         async def sendFn():
             if not self.ready:
                 raise Exception("We aren't ready yet [sendPM].")
             sent = asyncio.get_event_loop().create_future()
             isReceived = False
-            def reject(reason: str = None):
+            def reject(reason = None):
                 if not sent.done():
                     self.socket.off('pm', sentCheck)
                     sent.set_exception(Exception(reason))
@@ -2429,7 +2514,7 @@ class Character(Observer):
             return sent.result()
         return await Tools.tryExcept(sendFn)
 
-    async def say(self, message: str) -> None:
+    async def say(self, message):
         async def sentFn():
             nonlocal self
             nonlocal message
@@ -2461,7 +2546,7 @@ class Character(Observer):
             return sent.result()
         return await Tools.tryExcept(sentFn)
 
-    async def sendFriendRequest(self, id: str) -> None:
+    async def sendFriendRequest(self, id):
         async def friendRequestFn():
             nonlocal self
             nonlocal id
@@ -2492,7 +2577,7 @@ class Character(Observer):
             return requestSent.result()
         return await Tools.tryExcept(friendRequestFn)
 
-    async def sendGold(self, to: str, amount: int) -> int:
+    async def sendGold(self, to, amount):
         async def sendFn():
             nonlocal self
             nonlocal to
@@ -2533,7 +2618,7 @@ class Character(Observer):
             return goldSent.result()
         return await Tools.tryExcept(sendFn)
 
-    async def sendItem(self, to: str, inventoryPos: int, quantity: int = 1) -> None:
+    async def sendItem(self, to, inventoryPos, quantity = 1):
         async def sendFn():
             nonlocal self
             nonlocal inventoryPos
@@ -2571,7 +2656,7 @@ class Character(Observer):
             return itemSent.result()
         return await Tools.tryExcept(sendFn)
 
-    async def sendPartyInvite(self, id: str) -> None:
+    async def sendPartyInvite(self, id):
         async def inviteFn():
             nonlocal self
             nonlocal id
@@ -2599,7 +2684,7 @@ class Character(Observer):
             return invited.result()
         return await Tools.tryExcept(inviteFn)
 
-    async def sendPartyRequest(self, id: str) -> None:
+    async def sendPartyRequest(self, id):
         async def sendFn():
             nonlocal self
             nonlocal id
@@ -2608,7 +2693,7 @@ class Character(Observer):
             await self.socket.emit('party', { 'event': 'request', 'name': 'id' })
         return await Tools.tryExcept(sendFn)
 
-    async def shiftBooster(self, booster: int, to: str) -> None:
+    async def shiftBooster(self, booster, to):
         async def shiftFn():
             nonlocal self
             nonlocal booster
@@ -2625,7 +2710,7 @@ class Character(Observer):
             await self.socket.emit('booster', { 'action': 'shift', 'num': booster, 'to': to })
         return await Tools.tryExcept(shiftFn)
 
-    async def smartMove(self, to, *, avoidTownWarps: bool = False, getWithin: int = 0, useBlink: bool = False, costs: dict = None) -> dict[str, int | str]:
+    async def smartMove(self, to, *, avoidTownWarps = False, getWithin = 0, useBlink = False, costs = None):
         async def smartMoveFn():
             nonlocal self
             nonlocal to
@@ -2639,11 +2724,11 @@ class Character(Observer):
                 raise Exception("We can't smartMove; we are dead.")
             if costs == None:
                 costs = {}
-            if (not Tools.hasKey(costs, 'blink')) or costs['blink'] == None:
+            if costs.get('blink') == None:
                 costs['blink'] = self.speed * 3.2 + 250
-            if (not Tools.hasKey(costs, 'town')) or costs['town'] == None:
+            if costs.get('town') == None:
                 costs['town'] = self.speed * (4 + (min(self.ping, 1) / 0.5))
-            if (not Tools.hasKey(costs, 'transport')) or costs['transport'] == None:
+            if costs.get('transport') == None:
                 costs['transport'] = self.speed * (min(self.ping, 1) / 0.5)
             fixedTo = {}
             path = []
@@ -2694,7 +2779,7 @@ class Character(Observer):
                 
                 if not fixedTo:
                     raise Exception(f"Could not find a suitable destination for '{to}'")
-            elif Tools.hasKey(to, 'x') and Tools.hasKey(to, 'y'):
+            elif to.get('x') != None and to.get('y') != None:
                 fixedTo = { 'map': to['map'] if Tools.hasKey(to, 'map') else self.map, 'x': to['x'], 'y': to['y'] }
             else:
                 print(to)
@@ -2836,7 +2921,7 @@ class Character(Observer):
             return { 'map': self.map, 'x': self.x, 'y': self.y }
         return await Tools.tryExcept(smartMoveFn)
 
-    async def startKonami(self) -> str:
+    async def startKonami(self):
         async def startFn():
             started = asyncio.get_event_loop().create_future()
             def reject(reason = None):
@@ -2873,7 +2958,7 @@ class Character(Observer):
             return started.result()
         return await Tools.tryExcept(startFn)
 
-    async def stopSmartMove(self) -> dict[str, int|str]:
+    async def stopSmartMove(self):
         async def stopMoveFn():
             nonlocal self
             if not self.ready:
@@ -2885,7 +2970,7 @@ class Character(Observer):
             return await self.move(self.x, self.y)
         return await Tools.tryExcept(stopMoveFn)
 
-    async def stopWarpToTown(self) -> None:
+    async def stopWarpToTown(self):
         async def stopWarpFn():
             nonlocal self
             if not self.ready:
@@ -2894,7 +2979,7 @@ class Character(Observer):
             return
         return await Tools.tryExcept(stopWarpFn)
 
-    async def swapItems(self, itemPosA: int, itemPosB: int) -> None:
+    async def swapItems(self, itemPosA, itemPosB):
         async def swapFn():
             nonlocal self
             nonlocal itemPosA
@@ -2932,7 +3017,7 @@ class Character(Observer):
             return itemsSwapped.result()
         return await Tools.tryExcept(swapFn)
 
-    async def takeMailItem(self, mailID: str) -> None:
+    async def takeMailItem(self, mailID):
         async def getItemFn():
             nonlocal self
             if not self.ready:
@@ -2960,9 +3045,9 @@ class Character(Observer):
             return itemReceived.result()
         return await Tools.tryExcept(getItemFn)
 
-    async def throwSnowball(self, target: str, snowball: int = None) -> str:
+    async def throwSnowball(self, target, snowball = None):
         async def throwFn():
-            nonlocal self
+            nonlocal self, target, snowball
             if not self.ready:
                 raise Exception("We aren't ready yet [throwSnowball].")
             if snowball == None:
@@ -3003,7 +3088,7 @@ class Character(Observer):
             return throwStarted.result()
         return await Tools.tryExcept(throwFn)
 
-    async def transport(self, map: str, spawn: int):
+    async def transport(self, map, spawn):
         async def transportFn():
             nonlocal self
             if not self.ready:
@@ -3044,7 +3129,7 @@ class Character(Observer):
             return transportComplete.result()
         return await Tools.tryExcept(transportFn)
 
-    async def unequip(self, slot: str):
+    async def unequip(self, slot):
         async def unequipFn():
             nonlocal self
             nonlocal slot
@@ -3099,7 +3184,7 @@ class Character(Observer):
             return unequipped.result()
         return await Tools.tryExcept(unequipFn)
 
-    async def unfriend(self, id: str):
+    async def unfriend(self, id):
         async def unfriendFn():
             nonlocal self
             nonlocal id
@@ -3134,7 +3219,7 @@ class Character(Observer):
             return unfriended.result()
         return await Tools.tryExcept(unfriendFn)
 
-    async def upgrade(self, itemPos: int, scrollPos: int, offeringPos: int = None):
+    async def upgrade(self, itemPos, scrollPos, offeringPos = None):
         async def upgradeFn():
             nonlocal self
             nonlocal itemPos
@@ -3209,7 +3294,7 @@ class Character(Observer):
             return upgradeComplete.result()
         return await Tools.tryExcept(upgradeFn)
 
-    async def useHPPot(self, itemPos: int):
+    async def useHPPot(self, itemPos):
         async def healFn():
             nonlocal self
             nonlocal itemPos
@@ -3252,7 +3337,7 @@ class Character(Observer):
             return healReceived.result()
         return await Tools.tryExcept(healFn)
 
-    async def useMPPot(self, itemPos: int):
+    async def useMPPot(self, itemPos):
         async def healFn():
             nonlocal self
             nonlocal itemPos
@@ -3349,7 +3434,7 @@ class Character(Observer):
             return warpComplete.result()
         return await Tools.tryExcept(warpFn)
 
-    async def withdrawGold(self, gold: int):
+    async def withdrawGold(self, gold):
         async def goldFn():
             nonlocal self
             nonlocal gold
@@ -3362,7 +3447,7 @@ class Character(Observer):
             await self.socket.emit('bank', { 'amount': gold, 'operation': 'withdraw' })
         return await Tools.tryExcept(goldFn)
 
-    async def withdrawItem(self, bankPack: str, bankPos: int, inventoryPos: int = -1):
+    async def withdrawItem(self, bankPack, bankPos, inventoryPos = -1):
         async def itemFn():
             nonlocal self
             nonlocal bankPack
@@ -3415,7 +3500,7 @@ class Character(Observer):
             return swapped.result()
         return await Tools.tryExcept(itemFn)
 
-    async def zapperZap(self, id: str):
+    async def zapperZap(self, id):
         async def zapFn():
             nonlocal self
             nonlocal id
@@ -3481,22 +3566,22 @@ class Character(Observer):
             if (incomingProjectileDamage >= self.hp): return True
         return False
 
-    def countItem(self, item: str, inventory: dict = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None):
+    def countItem(self, item, inventory = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None):
         kwargs = { 'level': level, 'levelGreaterThan': levelGreaterThan, 'levelLessThan': levelLessThan, 'locked': locked, 'pvpMarked': pvpMarked, 'quantityGreaterThan': quantityGreaterThan, 'special': special, 'statType': statType }
         count = 0
         for index in self.locateItems(item, inventory, **kwargs):
             curr = inventory[index]
-            count += curr['q'] if Tools.hasKey(curr, 'q') else 1
+            count += curr['q'] if curr.get('q') != None else 1
         return count
 
-    def getCooldown(self, skill: str):
+    def getCooldown(self, skill):
         gSkill = self.G['skills'][skill]
         share = gSkill.get('share', None)
         nextSkill = self.nextSkill.get(share) if share != None else self.nextSkill.get(skill)
         if nextSkill == None:
             return 0
 
-        cooldown = nextSkill.get(skill, datetime.utcnow().timestamp()) - datetime.utcnow().timestamp()
+        cooldown = nextSkill - datetime.utcnow().timestamp()
         if cooldown <= 0: return 0
         return cooldown
     
@@ -3506,7 +3591,7 @@ class Character(Observer):
         closest = None
         closestD = sys.maxsize
         for player in self.players.values():
-            if Tools.hasKey(player.s, 'invincible'): continue
+            if player.s.get('invincible') != None: continue
             if hasattr(player, 'npc'): continue
             d = Tools.distance(self, player)
             if d < closestD:
@@ -3522,13 +3607,13 @@ class Character(Observer):
         for i in range(0, len(inv)):
             item = inv[i]
             if item != None:
-                if Tools.hasKey(item, 'v'):
+                if item.get('v') != None:
                     return True
         return False
 
-    def hasItem(self, iN, inv = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None):
+    def hasItem(self, itemName, inv = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None):
         kwargs = { 'level': level, 'levelGreaterThan': levelGreaterThan, 'levelLessThan': levelLessThan, 'locked': locked, 'pvpMarked': pvpMarked, 'quantityGreaterThan': quantityGreaterThan, 'special': special, 'statType': statType }
-        return len(self.locateItems(iN, inv, **kwargs)) > 0
+        return len(self.locateItems(itemName, inv, **kwargs)) > 0
     
     def isCompounding(self):
         return Tools.hasKey(self.q, 'compound')
@@ -3536,12 +3621,12 @@ class Character(Observer):
     def isEquipped(self, itemName):
         for slot in self.slots:
             if self.slots[slot] == None: continue
-            if Tools.hasKey(self.slots[slot], 'price'): continue
+            if self.slots[slot].get('price') != None: continue
             if self.slots[slot]['name'] == itemName: return True
         return False
     
     def isExchanging(self):
-        return Tools.hasKey(self.q, 'exchange')
+        return self.q.get('exchange') != None
     
     def isListedForPurchase(self, itemName):
         for slot in self.slots:
@@ -3570,13 +3655,13 @@ class Character(Observer):
         if Tools.hasKey(self.G['maps'][self.map], 'safe'): return False
         return self.server['pvp']
 
-    def locateItem(self, iN, inv = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None, returnHighestLevel = False, returnLowestLevel = False ):
+    def locateItem(self, itemName, inv = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None, returnHighestLevel = False, returnLowestLevel = False ):
         if inv == None:
             inv = self.items
         
         kwargs = { 'level': level, 'levelGreaterThan': levelGreaterThan, 'levelLessThan': levelLessThan, 'locked': locked, 'pvpMarked': pvpMarked, 'quantityGreaterThan': quantityGreaterThan, 'special': special, 'statType': statType }
         
-        located = self.locateItems(iN, inv, **kwargs)
+        located = self.locateItems(itemName, inv, **kwargs)
 
         if len(located) == 0: return None
 
@@ -3606,7 +3691,7 @@ class Character(Observer):
         
         return located[0]
     
-    def locateItems(self, iN, inv = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None):
+    def locateItems(self, itemName, inv = None, *, level = None, levelGreaterThan = None, levelLessThan = None, locked = None, pvpMarked = None, quantityGreaterThan = None, special = None, statType = None):
         if inv == None:
             inv = self.items
         
@@ -3617,7 +3702,7 @@ class Character(Observer):
         for i in range(0, len(inv)):
             item = inv[i]
             if item == None: continue
-            if item['name'] != iN: continue
+            if item['name'] != itemName: continue
 
             if level != None:
                 if item['level'] != level:
