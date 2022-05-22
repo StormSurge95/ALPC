@@ -1,8 +1,5 @@
-from ctypes import Union
 from functools import reduce
 import logging
-from pprint import pprint
-from urllib.parse import _NetlocResultMixinBytes
 import pymongo
 from .database import Database
 from .Observer import Observer
@@ -1786,7 +1783,7 @@ class Character(Observer):
             return questFinished.result()
         return await Tools.tryExcept(questFn)
 
-    def getEntities(self, *, canDamage = None, canWalkTo = None, couldGiveCredit = None, withinRange = None, targetingMe = None, targetingPartyMember = None, targetingPlayer = None, type = None, typeList = None, level = None, levelGreaterThan = None, levelLessThan = None, willBurnToDeath = None, willDieToProjectiles = None):
+    def getEntities(self, *, canDamage = None, canWalkTo = None, couldGiveCredit = None, withinRange = None, targetingMe = None, targetingPartyMember = None, targetingPlayer = None, type = None, typeList = None, level = None, levelGreaterThan = None, levelLessThan = None, willBurnToDeath = None, willDieToProjectiles = None) -> list[Entity]:
         entities = []
         for entity in self.entities.values():
             if targetingMe != None:
@@ -2710,14 +2707,9 @@ class Character(Observer):
             await self.socket.emit('booster', { 'action': 'shift', 'num': booster, 'to': to })
         return await Tools.tryExcept(shiftFn)
 
-    async def smartMove(self, to, *, avoidTownWarps = False, getWithin = 0, useBlink = False, costs = None):
+    async def smartMove(self, to, *, avoidTownWarps = False, getWithin = 0, useBlink = False, stopIfTrue = None, costs = None):
         async def smartMoveFn():
-            nonlocal self
-            nonlocal to
-            nonlocal avoidTownWarps
-            nonlocal getWithin
-            nonlocal useBlink
-            nonlocal costs
+            nonlocal self, to, avoidTownWarps, getWithin, useBlink, stopIfTrue, costs
             if not self.ready:
                 raise Exception("We aren't ready yet [smartMove].")
             if self.rip:
@@ -2779,7 +2771,7 @@ class Character(Observer):
                 
                 if not fixedTo:
                     raise Exception(f"Could not find a suitable destination for '{to}'")
-            elif to.get('x') != None and to.get('y') != None:
+            elif hasattr(to, 'get') and to.get('x') != None and to.get('y') != None:
                 fixedTo = { 'map': to['map'] if Tools.hasKey(to, 'map') else self.map, 'x': to['x'], 'y': to['y'] }
             else:
                 print(to)
@@ -2814,6 +2806,8 @@ class Character(Observer):
                     break # We're already close enough
                     
                 # conditional?
+                if stopIfTrue != None and stopIfTrue():
+                    break # We met our condition
 
                 # 'getWithin' Check
                 if currentMove['type'] == 'move' and self.map == fixedTo['map'] and getWithin > 0:
