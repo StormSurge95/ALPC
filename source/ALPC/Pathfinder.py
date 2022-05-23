@@ -1,6 +1,8 @@
+from copy import deepcopy
 from datetime import datetime
 import logging
 import math
+import multiprocessing
 import sys
 from .Delaunator import Delaunator
 import igraph
@@ -207,6 +209,11 @@ class Pathfinder(object):
     def getGrid(map: str, base = Constants.BASE):
         if Pathfinder.grids.get(map):
             return Pathfinder.grids[map]
+        else:
+            return Pathfinder.createGrid(map, base)
+
+    @staticmethod
+    def createGrid(map: str, base = Constants.BASE):
         if Pathfinder.G == None:
             raise Exception("Prepare pathfinding before querying getGrid()!")
 
@@ -269,11 +276,10 @@ class Pathfinder(object):
         # print(f"  grid size: {len(grid)}")
         # print(f"  grid completion: {(datetime.utcnow().timestamp() - gridStart)}\n")
         Pathfinder.grids[map] = grid
-        Pathfinder.updateGraph(grid, map)
         return grid
 
     @staticmethod
-    def updateGraph(grid, map):
+    def createVertexData(map: str, grid: list[int], vertexNames: list[str], vertexAttrs: dict[str, str | int]):
         gMap = Pathfinder.G['maps'][map]
         gGeo = Pathfinder.G['geometry'][map]
         minX = gGeo['min_x']
@@ -284,14 +290,8 @@ class Pathfinder(object):
         height = maxY - minY
 
         points = set()         # list of points for delaunay
-        links = []          # list of links between walkable nodes as [point1, point2]
-        linkData = []       # list of dictionaries containing attributes for particular links
-        linkAttr = {}       # dictionary containing list of attributes for each link
-
+        
         # add nodes at corners
-        # cornersStart = datetime.utcnow().timestamp()
-        # print("  Adding corners...")
-        # print(f"  # nodes: {len(walkableNodes)}")
         for y in range(1, height - 1):
             for x in range(1, width):
                 # for each walkable x/y position...
@@ -322,15 +322,11 @@ class Pathfinder(object):
                     or ((upperRight == UNWALKABLE) and (UNWALKABLE not in [upperCenter, middleRight]))      # outside-3
                     or ((upperLeft == UNWALKABLE) and (UNWALKABLE not in [upperCenter, middleLeft]))):      # outside-4
                     points.add((mapX, mapY))
-        # print(f"  corner completion: {(datetime.utcnow().timestamp() - cornersStart)}\n")
         
         # add nodes at transporters (we'll look for close nodes to transporters later)
-        # transportersStart = datetime.utcnow().timestamp()
-        # print("  Adding transporter nodes...")
-        # print(f"  # nodes: {len(walkableNodes)}")
         transporters = [npc for npc in gMap['npcs'] if npc['id'] == 'transporter']
-        for npc in transporters:
-            pos = npc['position']
+        if len(transporters) > 0:
+            pos = transporters[0]['position']
             closest = Pathfinder.findClosestSpawn(map, pos[0], pos[1])
             points.add((closest['x'], closest['y']))
 
@@ -342,12 +338,8 @@ class Pathfinder(object):
                 if Pathfinder.canStand({'map': map, 'x': x, 'y': y}):
                     points.add((x, y))
                 angle += math.pi / 32
-        # print(f"  transporter completion: {(datetime.utcnow().timestamp() - transportersStart)}\n")
-
+        
         # add nodes at doors (we'll look for close nodes to doors later)
-        # doorsStart = datetime.utcnow().timestamp()
-        # print("  Adding door nodes...")
-        # print(f"  # nodes: {len(walkableNodes)}")
         doors = [door for door in gMap['doors'] if len(door) <= 7 or door[7] != 'complicated']
         for door in doors:
             # From
@@ -373,99 +365,102 @@ class Pathfinder(object):
                     if Pathfinder.canStand({ 'map': map, 'x': x, 'y': y }):
                         points.add((x, y))
                     angle += math.pi / 32
-        # print(f"  door completion: {(datetime.utcnow().timestamp() - doorsStart)}\n")
-        
+         
         # Add nodes at spawns
-        # spawnsStart = datetime.utcnow().timestamp()
-        # print("  Adding spawn nodes...")
-        # print(f"  # nodes: {len(walkableNodes)}")
-        townLinkData = { 'map': map, 'type': 'town', 'x': gMap['spawns'][0][0], 'y': gMap['spawns'][0][1], 'spawn': None, 'key': None }
         for spawn in gMap['spawns']:
             points.add((spawn[0], spawn[1]))
-        # print(f"  spawns completion: {(datetime.utcnow().timestamp() - spawnsStart)}\n")
-
-        vertexNames = [f"{map}:{x},{y}" for (x, y) in points]
-        attrs = { 'map': [map] * len(vertexNames), 'x': [p[0] for p in points], 'y': [p[1] for p in points] }
-        Pathfinder.graph.add_vertices(vertexNames, attrs)
-        walkableNodes = Pathfinder.graph.vs.select(map_eq=map)
         
-        # collect link data
-        # linksStart = datetime.utcnow().timestamp()
-        # print("  Adding walkable links...")
-        # print(f"  # nodes: {len(walkableNodes)}")
-        for fromNode in walkableNodes:
-            # add destination nodes and links to maps that are reachable through the door(s)
-            for door in doors:
-                if Pathfinder.doorDistance(fromNode, door) >= Constants.DOOR_REACH_DISTANCE:
-                    continue # door is too far away
-                # To:
-                spawn2 = Pathfinder.G['maps'][door[4]]['spawns'][door[5]]
-                toDoor = Pathfinder.addNodeToGraph(door[4], spawn2[0], spawn2[1])
-                # instance door (requires 'enter' function)
-                if len(door) > 7 and door[7] == 'key':
-                    links.append([fromNode, toDoor])
-                    linkData.append({ 'key': door[8], 'map': toDoor['map'], 'type': 'enter', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': None })
-                # map door (requires 'transport' function)
-                else:
-                    links.append([fromNode, toDoor])
-                    linkData.append({ 'key': None, 'map': toDoor['map'], 'type': 'transport', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': door[5] })
-            # add destination nodes and links to maps that are reachable through the transporter(s)
-            for npc in transporters:
-                pos = npc['position']
-                if Tools.distance(fromNode, { 'x': pos[0], 'y': pos[1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
-                    continue # transporter is too far away
-                for toMap in Pathfinder.G['npcs']['transporter']['places']:
-                    if map == toMap:
-                        continue # don't add links to ourself
+        vertexNames += [f"{map}:{x},{y}" for (x, y) in points]
+        vertexAttrs['map'] += [map] * len(points)
+        vertexAttrs['x'] += [p[0] for p in points]
+        vertexAttrs['y'] += [p[1] for p in points]
 
-                    spawnID = Pathfinder.G['npcs']['transporter']['places'][toMap]
-                    spawn = Pathfinder.G['maps'][toMap]['spawns'][spawnID]
-                    toNode = Pathfinder.addNodeToGraph(toMap, spawn[0], spawn[1])
+    @staticmethod
+    def createLinkData(maps):
+        links = []
+        linkData = []
+        linkAttr = {}
 
-                    links.append([fromNode, toNode])
-                    linkData.append({ 'key': None, 'map': toMap, 'type': 'transport', 'x': toNode['x'], 'y': toNode['y'], 'spawn': spawnID})
-        
-        leaveLink = Pathfinder.addNodeToGraph('main', Pathfinder.G['maps']['main']['spawns'][0][0], Pathfinder.G['maps']['main']['spawns'][0][1])
-        leaveLinkData = { 'map': leaveLink['map'], 'type': 'leave', 'x': leaveLink['x'], 'y': leaveLink['y'], 'key': None, 'spawn': None }
-        townNode = Pathfinder.graph.vs.find(name=f"{map}:{gMap['spawns'][0][0]},{gMap['spawns'][0][1]}")
-        for node in walkableNodes:
-            # create town links
-            if node != townNode:
-                links.append([node, townNode])
-                linkData.append({ 'key': townLinkData['key'], 'map': townLinkData['map'], 'type': townLinkData['type'], 'x': townLinkData['x'], 'y': townLinkData['y'], 'spawn': townLinkData['spawn'] })
+        for map in maps:
+            walkableNodes = Pathfinder.graph.vs.select(map_eq=map)
+
+            doors = [door for door in Pathfinder.G['maps'][map]['doors'] if len(door) <= 7 or door[7] != 'complicated']
+            transporters = [npc for npc in Pathfinder.G['maps'][map]['npcs'] if npc['id'] == 'transporter']
             
-            # create leave links
-            if map == 'cyberland' or map == 'jail':
-                links.append([node, leaveLink])
-                linkData.append({ 'key': leaveLinkData['key'], 'map': leaveLinkData['map'], 'type': leaveLinkData['type'], 'x': leaveLinkData['x'], 'y': leaveLinkData['y'], 'spawn': leaveLinkData['spawn'] })
+            for fromNode in walkableNodes:
+                # add destination nodes and links to maps that are reachable through the door(s)
+                for door in doors:
+                    if Pathfinder.doorDistance(fromNode, door) >= Constants.DOOR_REACH_DISTANCE:
+                        continue # door is too far away
+                    # To:
+                    spawn2 = Pathfinder.G['maps'][door[4]]['spawns'][door[5]]
+                    toDoor = Pathfinder.addNodeToGraph(door[4], spawn2[0], spawn2[1])
+                    # instance door (requires 'enter' function)
+                    if len(door) > 7 and door[7] == 'key':
+                        links.append([fromNode, toDoor])
+                        linkData.append({ 'key': door[8], 'map': toDoor['map'], 'type': 'enter', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': None })
+                    # map door (requires 'transport' function)
+                    else:
+                        links.append([fromNode, toDoor])
+                        linkData.append({ 'key': None, 'map': toDoor['map'], 'type': 'transport', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': door[5] })
+                # add destination nodes and links to maps that are reachable through the transporter(s)
+                if len(transporters) > 0:
+                    pos = transporters[0]['position']
+                    if Tools.distance(fromNode, { 'x': pos[0], 'y': pos[1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
+                        continue # transporter is too far away
+                    for toMap in Pathfinder.G['npcs']['transporter']['places']:
+                        if map == toMap:
+                            continue # don't add links to ourself
 
-        # check if we can walk to other nodes
-        delaunay = Delaunator(list(points))
-        
-        for i in range(0, len(delaunay.halfedges)):
-            halfedge = delaunay.halfedges[i]
-            if halfedge < i:
-                continue
-            ti = delaunay.triangles[i]
-            tj = delaunay.triangles[halfedge]
+                        spawnID = Pathfinder.G['npcs']['transporter']['places'][toMap]
+                        spawn = Pathfinder.G['maps'][toMap]['spawns'][spawnID]
+                        toNode = Pathfinder.addNodeToGraph(toMap, spawn[0], spawn[1])
 
-            x1 = delaunay.coords[ti * 2]
-            y1 = delaunay.coords[ti * 2 + 1]
-            x2 = delaunay.coords[tj * 2]
-            y2 = delaunay.coords[tj * 2 + 1]
+                        links.append([fromNode, toNode])
+                        linkData.append({ 'key': None, 'map': toMap, 'type': 'transport', 'x': toNode['x'], 'y': toNode['y'], 'spawn': spawnID})
+            
+            leaveLink = Pathfinder.addNodeToGraph('main', Pathfinder.G['maps']['main']['spawns'][0][0], Pathfinder.G['maps']['main']['spawns'][0][1])
+            leaveLinkData = { 'map': leaveLink['map'], 'type': 'leave', 'x': leaveLink['x'], 'y': leaveLink['y'], 'key': None, 'spawn': None }
+            townNode = Pathfinder.graph.vs.find(name=f"{map}:{Pathfinder.G['maps'][map]['spawns'][0][0]},{Pathfinder.G['maps'][map]['spawns'][0][1]}")
+            townLinkData = { 'map': map, 'type': 'town', 'x': Pathfinder.G['maps'][map]['spawns'][0][0], 'y': Pathfinder.G['maps'][map]['spawns'][0][1], 'spawn': None, 'key': None }
+            for node in walkableNodes:
+                # create town links
+                if node != townNode:
+                    links.append([node, townNode])
+                    linkData.append({ 'key': townLinkData['key'], 'map': townLinkData['map'], 'type': townLinkData['type'], 'x': townLinkData['x'], 'y': townLinkData['y'], 'spawn': townLinkData['spawn'] })
+                
+                # create leave links
+                if map == 'cyberland' or map == 'jail':
+                    links.append([node, leaveLink])
+                    linkData.append({ 'key': leaveLinkData['key'], 'map': leaveLinkData['map'], 'type': leaveLinkData['type'], 'x': leaveLinkData['x'], 'y': leaveLinkData['y'], 'spawn': leaveLinkData['spawn'] })
 
-            name1 = f"{map}:{x1},{y1}"
-            name2 = f"{map}:{x2},{y2}"
-            node1 = Pathfinder.graph.vs.find(name_eq=name1)
-            node2 = Pathfinder.graph.vs.find(name_eq=name2)
-            if Pathfinder.canWalkPath({ 'map': map, 'x': x1, 'y': y1 }, { 'map': map, 'x': x2, 'y': y2 }):
-                links.append([node1, node2])
-                linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x2, 'y': y2, 'spawn': None })
-                links.append([node2, node1])
-                linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x1, 'y': y1, 'spawn': None })
-        # print(f"  Link completion: {(datetime.utcnow().timestamp() - linksStart)}\n")
+            points = [(node['x'], node['y']) for node in walkableNodes]
+            # check if we can walk to other nodes
+            delaunay = Delaunator(list(points))
+            
+            for i in range(0, len(delaunay.halfedges)):
+                halfedge = delaunay.halfedges[i]
+                if halfedge < i:
+                    continue
+                ti = delaunay.triangles[i]
+                tj = delaunay.triangles[halfedge]
+
+                x1 = delaunay.coords[ti * 2]
+                y1 = delaunay.coords[ti * 2 + 1]
+                x2 = delaunay.coords[tj * 2]
+                y2 = delaunay.coords[tj * 2 + 1]
+
+                name1 = f"{map}:{x1},{y1}"
+                name2 = f"{map}:{x2},{y2}"
+                node1 = Pathfinder.graph.vs.find(name_eq=name1)
+                node2 = Pathfinder.graph.vs.find(name_eq=name2)
+                if Pathfinder.canWalkPath({ 'map': map, 'x': x1, 'y': y1 }, { 'map': map, 'x': x2, 'y': y2 }):
+                    links.append([node1, node2])
+                    linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x2, 'y': y2, 'spawn': None })
+                    links.append([node2, node1])
+                    linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x1, 'y': y1, 'spawn': None })
         linkAttr['data'] = linkData
-        Pathfinder.graph.add_edges(links, linkAttr)
+        return links, linkAttr
     
     @staticmethod
     def findClosestNode(map: str, x: int, y: int):
@@ -661,6 +656,10 @@ class Pathfinder(object):
         return to
 
     @staticmethod
+    def init(g):
+        Pathfinder.G = g
+
+    @staticmethod
     async def prepare(g, *, base = Constants.BASE, cheat = False, include_bank_b = False, include_bank_u = False, include_test = False):
         Pathfinder.G = g
 
@@ -698,8 +697,24 @@ class Pathfinder(object):
         
         maps.append('jail')
 
-        for map in maps:
-            Pathfinder.getGrid(map, base)
+        vertexNames = []
+        vertexAttrs = { 'map': [], 'x': [], 'y': [] }
+        # for map in maps:
+        #     Pathfinder.createVertexData(map, Pathfinder.getGrid(map, base), vertexNames, vertexAttrs)
+        with multiprocessing.Manager() as m:
+            ml = m.list(vertexNames)
+            md = m.dict(vertexAttrs)
+            with multiprocessing.Pool(processes=4, initializer=Pathfinder.init, initargs=(g,)) as p:
+                results = [p.apply_async(Pathfinder.createVertexData, args=(map, Pathfinder.createGrid(map, base), ml, md)) for map in maps]
+                for r in results:
+                    r.wait()
+            vertexNames = deepcopy(ml)
+            vertexAttrs = deepcopy(md)
+        
+        Pathfinder.graph.add_vertices(vertexNames, vertexAttrs)
+
+        links, linkAttr = Pathfinder.createLinkData(maps)
+        Pathfinder.graph.add_edges(links, linkAttr)
         
         if cheat:
             if 'winterland' in maps:
