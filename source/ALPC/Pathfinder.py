@@ -1,4 +1,3 @@
-from array import array
 from datetime import datetime
 import logging
 import math
@@ -415,7 +414,7 @@ class Pathfinder(object):
                 pos = npc['position']
                 if Tools.distance(fromNode, { 'x': pos[0], 'y': pos[1] }) > Constants.TRANSPORTER_REACH_DISTANCE:
                     continue # transporter is too far away
-                for toMap in list(Pathfinder.G['npcs']['transporter']['places']):
+                for toMap in Pathfinder.G['npcs']['transporter']['places']:
                     if map == toMap:
                         continue # don't add links to ourself
 
@@ -681,30 +680,26 @@ class Pathfinder(object):
             map = maps[i]
 
             for door in Pathfinder.G['maps'][map]['doors']:
-                if door[4] == 'bank_b' and not include_bank_b:
-                    continue
-                if door[4] == 'bank_u' and not include_bank_u:
-                    continue
-                if door[4] == 'test' and not include_test:
-                    continue
                 if door[4] not in maps:
                     maps.append(door[4])
             
             i += 1
         
-        for map in Pathfinder.G['npcs']['transporter']['places'].keys():
-            if map == 'test' and not include_test:
-                continue
+        for map in Pathfinder.G['npcs']['transporter']['places']:
             if map not in maps:
                 maps.append(map)
 
-        for map in maps:
-            if map == 'test' and not include_test:
-                continue
-            
-            Pathfinder.getGrid(map, base = base)
+        if 'bank_b' in maps and not include_bank_b:
+            maps.remove('bank_b')
+        if 'bank_u' in maps and not include_bank_u:
+            maps.remove('bank_u')
+        if 'test' in maps and not include_test:
+            maps.remove('test')
         
-        Pathfinder.getGrid('jail', base = base)
+        maps.append('jail')
+
+        for map in maps:
+            Pathfinder.getGrid(map, base)
         
         if cheat:
             if 'winterland' in maps:
