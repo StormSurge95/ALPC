@@ -1,0 +1,3 @@
+global-exclude *.json
+global-exclude Test.py
+global-exclude source/Bots/*

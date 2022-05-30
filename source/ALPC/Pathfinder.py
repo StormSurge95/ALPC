@@ -175,13 +175,8 @@ class Pathfinder(object):
     
     @staticmethod
     def getGrid(map: str, base = Constants.BASE):
-        if Pathfinder.grids.get(map):
+        if map in Pathfinder.grids:
             return Pathfinder.grids[map]
-        else:
-            return Pathfinder.createGrid(map, base)
-
-    @staticmethod
-    def createGrid(map: str, base = Constants.BASE):
         if Pathfinder.G == None:
             raise Exception("Prepare pathfinding before querying getGrid()!")
 
@@ -213,7 +208,7 @@ class Pathfinder(object):
             x = math.trunc(spawn[0]) - minX
             y = math.trunc(spawn[1]) - minY
             if grid[y * width + x] != WALKABLE:
-                stack = [[y,x]]
+                stack = [(y,x)]
                 while len(stack) > 0:
                     ny, nx = stack.pop()
                     while nx >= 0 and grid[ny * width + nx] == UNKNOWN:
@@ -224,13 +219,13 @@ class Pathfinder(object):
                     while nx < width and grid[ny * width + nx] == UNKNOWN:
                         grid[ny * width + nx] = WALKABLE
                         if not spanAbove and ny > 0 and grid[(ny - 1) * width + nx] == UNKNOWN:
-                            stack.append([ny - 1, nx])
+                            stack.append((ny - 1, nx))
                             spanAbove = 1
                         elif spanAbove and ny > 0 and grid[(ny - 1) * width + nx] != UNKNOWN:
                             spanAbove = 0
                         
                         if not spanBelow and ny < (height - 1) and grid[(ny + 1) * width + nx] == UNKNOWN:
-                            stack.append([ny + 1, nx])
+                            stack.append((ny + 1, nx))
                             spanBelow = 1
                         elif spanBelow and ny < (height - 1) and grid[(ny + 1) * width + nx] != UNKNOWN:
                             spanBelow = 0
@@ -246,7 +241,10 @@ class Pathfinder(object):
         height = Pathfinder.G['geometry'][map]['max_y'] - minY
 
         points = set()         # list of points for delaunay
+        print("\n")
+        Pathfinder.logger.debug(f"{map}:")
         
+        starttime = datetime.utcnow().timestamp()
         # add nodes at corners
         for y in range(1, height - 1):
             for x in range(1, width):
@@ -274,6 +272,8 @@ class Pathfinder(object):
                  or ((uR == UNWALKABLE) and (UNWALKABLE not in [uC, mR]))   # outside-3
                  or ((uL == UNWALKABLE) and (UNWALKABLE not in [uC, mL]))): # outside-4
                     points.add((x + minX, y + minY))
+        Pathfinder.logger.debug(f"    Corners: {datetime.utcnow().timestamp() - starttime}")
+        starttime = datetime.utcnow().timestamp()
         
         # add nodes at transporters (we'll look for close nodes to transporters later)
         transporters = [npc for npc in Pathfinder.G['maps'][map]['npcs'] if npc['id'] == 'transporter']
@@ -288,6 +288,8 @@ class Pathfinder(object):
                 y = math.trunc(pos[1] + math.sin(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
                 if Pathfinder.canStand({'map': map, 'x': x, 'y': y}):
                     points.add((x, y))
+        Pathfinder.logger.debug(f"    Transporters: {datetime.utcnow().timestamp() - starttime}")
+        starttime = datetime.utcnow().timestamp()
         
         # add nodes at doors (we'll look for close nodes to doors later)
         doors = [door for door in Pathfinder.G['maps'][map]['doors'] if len(door) <= 7 or door[7] != 'complicated']
@@ -313,10 +315,13 @@ class Pathfinder(object):
                     y = math.trunc(point['y'] + math.sin(angle) * (Constants.DOOR_REACH_DISTANCE - 10))
                     if Pathfinder.canStand({ 'map': map, 'x': x, 'y': y }):
                         points.add((x, y))
+        Pathfinder.logger.debug(f"    Doors: {datetime.utcnow().timestamp() - starttime}")
+        starttime = datetime.utcnow().timestamp()
          
         # Add nodes at spawns
         for spawn in Pathfinder.G['maps'][map]['spawns']:
             points.add((spawn[0], spawn[1]))
+        Pathfinder.logger.debug(f"    Spawns: {datetime.utcnow().timestamp() - starttime}")
         
         vertexNames += [f"{map}:{x},{y}" for (x, y) in points]
         vertexAttrs['map'] += [map] * len(points)
@@ -593,6 +598,7 @@ class Pathfinder(object):
     @staticmethod
     async def prepare(g, *, base = Constants.BASE, cheat = False, include_bank_b = False, include_bank_u = False, include_test = False):
         Pathfinder.G = g
+        Pathfinder.graph.clear()
 
         Pathfinder.logger = logging.getLogger('Pathfinder')
         handler = logging.StreamHandler()
@@ -623,15 +629,23 @@ class Pathfinder(object):
         vertexNames = []
         vertexAttrs = { 'map': [], 'x': [], 'y': [] }
         
-        with multiprocessing.Manager() as m:
-            ml = m.list(vertexNames)
-            md = m.dict(vertexAttrs)
-            with multiprocessing.Pool(processes=4, initializer=Pathfinder.init, initargs=(g,)) as p:
-                results = [p.apply_async(Pathfinder.createVertexData, args=(map, Pathfinder.createGrid(map, base), ml, md)) for map in maps]
-                for r in results:
-                    r.wait()
-            vertexNames = deepcopy(ml)
-            vertexAttrs = deepcopy(md)
+        for map in maps:
+            Pathfinder.getGrid(map, base)
+        Pathfinder.logger.debug(f"Grid creation: {datetime.utcnow().timestamp() - start2}")
+        start2 = datetime.utcnow().timestamp()
+
+        for map in maps:
+            Pathfinder.createVertexData(map, Pathfinder.getGrid(map), vertexNames, vertexAttrs)
+
+        # with multiprocessing.Manager() as m:
+        #     ml = m.list(vertexNames)
+        #     md = m.dict(vertexAttrs)
+        #     with multiprocessing.Pool(processes=4, initializer=Pathfinder.init, initargs=(g,)) as p:
+        #         results = [p.apply_async(Pathfinder.createVertexData, args=(map, Pathfinder.getGrid(map, base), ml, md)) for map in maps]
+        #         for r in results:
+        #             r.wait()
+        #     vertexNames = deepcopy(ml)
+        #     vertexAttrs = deepcopy(md)
         
         Pathfinder.graph.add_vertices(vertexNames, vertexAttrs)
 
@@ -654,3 +668,6 @@ class Pathfinder(object):
         Pathfinder.logger.debug(f"Pathfinding prepared! ({(datetime.utcnow().timestamp() - start)}s)")
         Pathfinder.logger.debug(f"  # Nodes: {len(Pathfinder.graph.vs)}")
         Pathfinder.logger.debug(f"  # Links: {len(Pathfinder.graph.es)}")
+
+        for map in maps:
+            Pathfinder.logger.debug(f"{map}: {len(Pathfinder.getGrid(map))}")
