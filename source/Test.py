@@ -12,19 +12,23 @@ async def main():
         async with aiohttp.ClientSession() as session:
             await AL.Game.loginJSONFile(session, '.\credentials.json')
             await AL.Game.getGData(session, True, True)
-            AL.Pathfinder.G = AL.Game.G
+            start = datetime.utcnow().timestamp()
+            await AL.Game.preparePathfinder()
+            print("julia time:",datetime.utcnow().timestamp() - start)
+            start = datetime.utcnow().timestamp()
             await AL.Pathfinder.prepare(AL.Game.G)
-            observers = [await AL.Game.startObserver(session, 'US', 'I'), await AL.Game.startObserver(session, 'US', 'II'), await AL.Game.startObserver(session, 'US', 'III'), 
-                        await AL.Game.startObserver(session, 'EU', 'I'), await AL.Game.startObserver(session, 'EU', 'II'), await AL.Game.startObserver(session, 'ASIA', 'I')]
+            print("python time:",datetime.utcnow().timestamp() - start)
+            # observers = [await AL.Game.startObserver(session, 'US', 'I'), await AL.Game.startObserver(session, 'US', 'II'), await AL.Game.startObserver(session, 'US', 'III'), 
+            #             await AL.Game.startObserver(session, 'EU', 'I'), await AL.Game.startObserver(session, 'EU', 'II'), await AL.Game.startObserver(session, 'ASIA', 'I')]
             # char = await AL.Game.startCharacter(session, 'StormSurge', 'US', 'III', False)
             # await char.smartMove('main')
             # await char.smartMove('halloween')
             # await char.smartMove('winterland')
             # await char.smartMove('desertland')
             # await char.smartMove('main')
-            await asyncio.sleep(30)
-            for obs in observers:
-                await obs.socket.disconnect()
+            # await asyncio.sleep(30)
+            # for obs in observers:
+            #     await obs.socket.disconnect()
             # await char.disconnect()
 
 if sys.platform == 'win32':

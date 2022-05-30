@@ -1,6 +1,4 @@
-from decimal import DivisionByZero
 import math
-from sys import maxsize
 
 EPSILON = math.pow(2,-52)
 EDGE_STACK =[None] * 512
