@@ -96,10 +96,8 @@ class Pathfinder(object):
         grid = Pathfinder.getGrid(frMap)
         width = Pathfinder.G['geometry'][frMap]['max_x'] - Pathfinder.G['geometry'][frMap]['min_x']
 
-        xStep = None
-        yStep = None
-        error = None
-        errorPrev = None
+        error = 0
+        errorPrev = 0
         x = math.trunc(frX) - Pathfinder.G['geometry'][frMap]['min_x']
         y = math.trunc(frY) - Pathfinder.G['geometry'][frMap]['min_y']
         dx = math.trunc(to['x']) - math.trunc(frX)
@@ -108,16 +106,10 @@ class Pathfinder(object):
         if grid[y * width + x] != WALKABLE:
             return False
         
-        if dy < 0:
-            yStep = -1
-            dy = -dy
-        else:
-            yStep = 1
-        if dx < 0:
-            xStep = -1
-            dx = -dx
-        else:
-            xStep = 1
+        yStep = Tools.sign(dy)
+        xStep = Tools.sign(dx)
+        dy *= yStep
+        dx *= xStep
         ddy = 2 * dy
         ddx = 2 * dx
 
@@ -161,16 +153,11 @@ class Pathfinder(object):
     @staticmethod
     def computeLinkCost(fr, to, link, *, avoidTownWarps: bool = None, costs: dict[str, int] = {}) -> int:
         if ((link['data']['type'] == 'leave') or (link['data']['type'] == 'transport')):
-            if link['data']['map'] == 'bank':
-                return 1000
-            return costs.get('transport', Pathfinder.TRANSPORT_COST)
+            return 1000 if link['data']['map'] == 'bank' else costs.get('transport', Pathfinder.TRANSPORT_COST)
         elif link['data']['type'] == 'enter':
             return costs.get('enter', Pathfinder.ENTER_COST)
         elif link['data']['type'] == 'town':
-            if avoidTownWarps:
-                return sys.maxsize
-            else:
-                return costs.get('town', Pathfinder.TOWN_COST)
+            return sys.maxsize if avoidTownWarps else costs.get('town', Pathfinder.TOWN_COST)
         
         if fr['map'] == to['map']:
             return Tools.distance(fr, to)
@@ -203,8 +190,6 @@ class Pathfinder(object):
         width = Pathfinder.G['geometry'][map]['max_x'] - minX
         height = Pathfinder.G['geometry'][map]['max_y'] - minY
 
-        # gridStart = datetime.utcnow().timestamp()
-        # print("  Starting grid creation...")
         grid = [UNKNOWN] * (height * width)
         for yLine in Pathfinder.G['geometry'][map]['y_lines']:
             lowerY = max(0, yLine[0] - minY - base['vn'])
@@ -250,8 +235,6 @@ class Pathfinder(object):
                         elif spanBelow and ny < (height - 1) and grid[(ny + 1) * width + nx] != UNKNOWN:
                             spanBelow = 0
                         nx += 1
-        # print(f"  grid size: {len(grid)}")
-        # print(f"  grid completion: {(datetime.utcnow().timestamp() - gridStart)}\n")
         Pathfinder.grids[map] = grid
         return grid
 
@@ -300,13 +283,11 @@ class Pathfinder(object):
             points.add((closest['x'], closest['y']))
 
             # make more points around transporter
-            angle = 0
-            while angle < math.pi * 2:
+            for angle in Tools.arange(0, math.pi * 2, math.pi / 32):
                 x = math.trunc(pos[0] + math.cos(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
                 y = math.trunc(pos[1] + math.sin(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
                 if Pathfinder.canStand({'map': map, 'x': x, 'y': y}):
                     points.add((x, y))
-                angle += math.pi / 32
         
         # add nodes at doors (we'll look for close nodes to doors later)
         doors = [door for door in Pathfinder.G['maps'][map]['doors'] if len(door) <= 7 or door[7] != 'complicated']
@@ -327,13 +308,11 @@ class Pathfinder(object):
                 { 'x': doorX + (doorWidth / 2), 'y': doorY + (doorHeight / 2) }  # Bottom left
             ]
             for point in doorCorners:
-                angle = 0
-                while angle < math.pi * 2:
+                for angle in Tools.arange(0, math.pi * 2, math.pi / 32):
                     x = math.trunc(point['x'] + math.cos(angle) * (Constants.DOOR_REACH_DISTANCE - 10))
                     y = math.trunc(point['y'] + math.sin(angle) * (Constants.DOOR_REACH_DISTANCE - 10))
                     if Pathfinder.canStand({ 'map': map, 'x': x, 'y': y }):
                         points.add((x, y))
-                    angle += math.pi / 32
          
         # Add nodes at spawns
         for spawn in Pathfinder.G['maps'][map]['spawns']:
@@ -363,13 +342,12 @@ class Pathfinder(object):
                     # To:
                     spawn2 = Pathfinder.G['maps'][door[4]]['spawns'][door[5]]
                     toDoor = Pathfinder.addNodeToGraph(door[4], spawn2[0], spawn2[1])
+                    links.append([fromNode, toDoor])
                     # instance door (requires 'enter' function)
                     if len(door) > 7 and door[7] == 'key':
-                        links.append([fromNode, toDoor])
                         linkData.append({ 'key': door[8], 'map': toDoor['map'], 'type': 'enter', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': None })
                     # map door (requires 'transport' function)
                     else:
-                        links.append([fromNode, toDoor])
                         linkData.append({ 'key': None, 'map': toDoor['map'], 'type': 'transport', 'x': toDoor['x'], 'y': toDoor['y'], 'spawn': door[5] })
                 # add destination nodes and links to maps that are reachable through the transporter(s)
                 if len(transporters) > 0:
@@ -410,23 +388,16 @@ class Pathfinder(object):
                 halfedge = delaunay.halfedges[i]
                 if halfedge < i:
                     continue
-                ti = delaunay.triangles[i]
-                tj = delaunay.triangles[halfedge]
 
-                x1 = delaunay.coords[ti * 2]
-                y1 = delaunay.coords[ti * 2 + 1]
-                x2 = delaunay.coords[tj * 2]
-                y2 = delaunay.coords[tj * 2 + 1]
-
-                name1 = f"{map}:{x1},{y1}"
-                name2 = f"{map}:{x2},{y2}"
+                name1 = f"{map}:{delaunay.coords[delaunay.triangles[i] * 2]},{delaunay.coords[delaunay.triangles[i] * 2 + 1]}"
+                name2 = f"{map}:{delaunay.coords[delaunay.triangles[delaunay.halfedges[i]] * 2]},{delaunay.coords[delaunay.triangles[delaunay.halfedges[i]] * 2 + 1]}"
                 node1 = Pathfinder.graph.vs.find(name_eq=name1)
                 node2 = Pathfinder.graph.vs.find(name_eq=name2)
-                if Pathfinder.canWalkPath({ 'map': map, 'x': x1, 'y': y1 }, { 'map': map, 'x': x2, 'y': y2 }):
+                if Pathfinder.canWalkPath({ 'map': map, 'x': delaunay.coords[delaunay.triangles[i] * 2], 'y': delaunay.coords[delaunay.triangles[i] * 2 + 1] }, { 'map': map, 'x': delaunay.coords[delaunay.triangles[delaunay.halfedges[i]] * 2], 'y': delaunay.coords[delaunay.triangles[delaunay.halfedges[i]] * 2 + 1] }):
                     links.append([node1, node2])
-                    linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x2, 'y': y2, 'spawn': None })
+                    linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': delaunay.coords[delaunay.triangles[delaunay.halfedges[i]] * 2], 'y': delaunay.coords[delaunay.triangles[delaunay.halfedges[i]] * 2 + 1], 'spawn': None })
                     links.append([node2, node1])
-                    linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': x1, 'y': y1, 'spawn': None })
+                    linkData.append({ 'key': None, 'map': map, 'type': 'move', 'x': delaunay.coords[delaunay.triangles[i] * 2], 'y': delaunay.coords[delaunay.triangles[i] * 2 + 1], 'spawn': None })
         linkAttr['data'] = linkData
         return links, linkAttr
     
@@ -500,9 +471,6 @@ class Pathfinder(object):
                 cost = Pathfinder.computeLinkCost(currentNode, nextNode, link=link, avoidTownWarps=avoidTownWarps, costs=costs)
                 if (cost < lowestCost) or ((cost == lowestCost) and ((link['data']['type'] == 'move'))):
                     lowestCost = cost
-                    map = Pathfinder.graph.vs[link.target]['map']
-                    x = Pathfinder.graph.vs[link.target]['x']
-                    y = Pathfinder.graph.vs[link.target]['y']
                     lowestCostLinkData = link['data']
             
             if lowestCostLinkData != None:
@@ -546,16 +514,15 @@ class Pathfinder(object):
             raise Exception("Prepare pathfinding beofre querying getSafeWalkTo()!")
 
         grid = Pathfinder.getGrid(frMap)
-        gGeo = Pathfinder.G['geometry'][frMap]
-        width = gGeo['max_x'] - gGeo['min_x']
+        width = Pathfinder.G['geometry'][frMap]['max_x'] - Pathfinder.G['geometry'][frMap]['min_x']
 
-        xStep = None
-        yStep = None
-        error = None
-        errorPrev = None
+        xStep = 0
+        yStep = 0
+        error = 0
+        errorPrev = 0
 
-        x = math.trunc(frX) - gGeo['min_x']
-        y = math.trunc(frY) - gGeo['min_y']
+        x = math.trunc(frX) - Pathfinder.G['geometry'][frMap]['min_x']
+        y = math.trunc(frY) - Pathfinder.G['geometry'][frMap]['min_y']
         dx = math.trunc(to['x']) - math.trunc(frX)
         dy = math.trunc(to['y']) - math.trunc(frY)
 
@@ -585,16 +552,16 @@ class Pathfinder(object):
                     y += yStep
                     error -= ddx
                     if error + errorPrev < ddx and grid[(y - yStep) * width + x] != WALKABLE:
-                        return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                        return { 'map': frMap, 'x': x - xStep + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y - yStep + Pathfinder.G['geometry'][frMap]['min_y'] }
                     elif error + errorPrev > ddx and grid[y * width + x - xStep] != WALKABLE:
-                        return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                        return { 'map': frMap, 'x': x - xStep + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y - yStep + Pathfinder.G['geometry'][frMap]['min_y'] }
                     else:
                         if grid[(y - yStep) * width + x] != WALKABLE:
-                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y - yStep + Pathfinder.G['geometry'][frMap]['min_y'] }
                         if grid[y * width + x - xStep] != WALKABLE:
-                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y - yStep + Pathfinder.G['geometry'][frMap]['min_y'] }
                 if grid[y * width + x] != WALKABLE:
-                    return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y + gGeo['min_y'] }
+                    return { 'map': frMap, 'x': x - xStep + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y + Pathfinder.G['geometry'][frMap]['min_y'] }
                 errorPrev = error
         else:
             errorPrev = error = dy
@@ -605,16 +572,16 @@ class Pathfinder(object):
                     x += xStep
                     error -= ddy
                     if error + errorPrev < ddy and grid[y * width + x - xStep] != WALKABLE:
-                        return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                        return { 'map': frMap, 'x': x - xStep + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y - yStep + Pathfinder.G['geometry'][frMap]['min_y'] }
                     elif error + errorPrev > ddy and grid[(y - yStep) * width + x] != WALKABLE:
-                        return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                        return { 'map': frMap, 'x': x - xStep + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y - yStep + Pathfinder.G['geometry'][frMap]['min_y'] }
                     else:
                         if grid[y * width + x - xStep] != WALKABLE:
-                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y - yStep + Pathfinder.G['geometry'][frMap]['min_y'] }
                         if grid[(y - yStep) * width + x] != WALKABLE:
-                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                            return { 'map': frMap, 'x': x - xStep + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y - yStep + Pathfinder.G['geometry'][frMap]['min_y'] }
                 if grid[y * width + x] != WALKABLE:
-                    return { 'map': frMap, 'x': x + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                    return { 'map': frMap, 'x': x + Pathfinder.G['geometry'][frMap]['min_x'], 'y': y - yStep + Pathfinder.G['geometry'][frMap]['min_y'] }
                 errorPrev = error
         
         return to
@@ -634,7 +601,7 @@ class Pathfinder(object):
         Pathfinder.logger.addHandler(handler)
 
         start = datetime.utcnow().timestamp()
-
+        start2 = datetime.utcnow().timestamp()
         NOTMAPS = ['d_b1', 'd2', 'batcave', 'resort', 'd_a2', 'dungeon0', 'cgallery', 'd_a1', 'ship0', 'd_g', 'abtesting', 'old_bank', 'old_main', 'original_main', 'duelland', 'test', 'bank_u', 'shellsisland', 'goobrawl', 'bank_b']
 
         # add every 'key' in G.maps if it's not in NOTMAPS
@@ -650,10 +617,12 @@ class Pathfinder(object):
         
         maps.append('jail')
 
+        Pathfinder.logger.debug(f"Map list creation: {datetime.utcnow().timestamp() - start2}")
+        start2 = datetime.utcnow().timestamp()
+
         vertexNames = []
         vertexAttrs = { 'map': [], 'x': [], 'y': [] }
-        # for map in maps:
-        #     Pathfinder.createVertexData(map, Pathfinder.getGrid(map, base), vertexNames, vertexAttrs)
+        
         with multiprocessing.Manager() as m:
             ml = m.list(vertexNames)
             md = m.dict(vertexAttrs)
@@ -666,17 +635,21 @@ class Pathfinder(object):
         
         Pathfinder.graph.add_vertices(vertexNames, vertexAttrs)
 
+        Pathfinder.logger.debug(f"Vertex creation: {datetime.utcnow().timestamp() - start2}")
+        start2 = datetime.utcnow().timestamp()
+
         links, linkAttr = Pathfinder.createLinkData(maps)
         Pathfinder.graph.add_edges(links, linkAttr)
+
+        Pathfinder.logger.debug(f"Edge creation: {datetime.utcnow().timestamp() - start2}")
         
-        if cheat:
-            if 'winterland' in maps:
-                fr = Pathfinder.findClosestNode('winterland', 721, 277)
-                to = Pathfinder.findClosestNode('winterland', 737, 352)
-                if fr != None and to != None and fr != to:
-                    Pathfinder.addLinkToGraph(fr, to)
-                else:
-                    print('The winterland map has changed, cheat to walk to icegolem is not enabled.')
+        if cheat and 'winterland' in maps:
+            fr = Pathfinder.findClosestNode('winterland', 721, 277)
+            to = Pathfinder.findClosestNode('winterland', 737, 352)
+            if fr != None and to != None and fr != to:
+                Pathfinder.addLinkToGraph(fr, to)
+            else:
+                print('The winterland map has changed, cheat to walk to icegolem is not enabled.')
 
         Pathfinder.logger.debug(f"Pathfinding prepared! ({(datetime.utcnow().timestamp() - start)}s)")
         Pathfinder.logger.debug(f"  # Nodes: {len(Pathfinder.graph.vs)}")

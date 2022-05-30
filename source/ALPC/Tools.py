@@ -73,3 +73,16 @@ class Tools:
         except Exception as e:
             Tools.logger.exception(e)
             return False
+
+    @staticmethod
+    def arange(start = 0, stop = 2 * math.pi, step = math.pi):
+        while start < stop:
+            yield float(start)
+            start += float(step)
+    
+    @staticmethod
+    def sign(num: int | float) -> int:
+        try:
+            return int(num / abs(num))
+        except:
+            return 0
