@@ -14,17 +14,17 @@ async def main():
             await AL.Game.getGData(session, True, True)
             AL.Pathfinder.G = AL.Game.G
             await AL.Pathfinder.prepare(AL.Game.G)
-            observers = [await AL.Game.startObserver(session, 'US', 'I'), await AL.Game.startObserver(session, 'US', 'II'), await AL.Game.startObserver(session, 'US', 'III'), 
-                        await AL.Game.startObserver(session, 'EU', 'I'), await AL.Game.startObserver(session, 'EU', 'II'), await AL.Game.startObserver(session, 'ASIA', 'I')]
+            # observers = [await AL.Game.startObserver(session, 'US', 'I'), await AL.Game.startObserver(session, 'US', 'II'), await AL.Game.startObserver(session, 'US', 'III'), 
+            #             await AL.Game.startObserver(session, 'EU', 'I'), await AL.Game.startObserver(session, 'EU', 'II'), await AL.Game.startObserver(session, 'ASIA', 'I')]
             # char = await AL.Game.startCharacter(session, 'StormSurge', 'US', 'III', False)
             # await char.smartMove('main')
             # await char.smartMove('halloween')
             # await char.smartMove('winterland')
             # await char.smartMove('desertland')
             # await char.smartMove('main')
-            await asyncio.sleep(30)
-            for obs in observers:
-                await obs.socket.disconnect()
+            # await asyncio.sleep(30)
+            # for obs in observers:
+            #     await obs.socket.disconnect()
             # await char.disconnect()
 
 if sys.platform == 'win32':

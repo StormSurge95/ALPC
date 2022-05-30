@@ -129,17 +129,12 @@ class Pathfinder(object):
                 if error > ddx:
                     y += yStep
                     error -= ddx
-                    if error + errorPrev < ddx:
-                        if grid[(y - yStep) * width + x] != WALKABLE:
-                            return False
-                    elif error + errorPrev > ddx:
-                        if grid[y * width + x - xStep] != WALKABLE:
-                            return False
-                    else:
-                        if grid[(y - yStep) * width + x] != WALKABLE:
-                            return False
-                        if grid[y * width + x - xStep] != WALKABLE:
-                            return False
+                    if error + errorPrev < ddx and grid[(y - yStep) * width + x] != WALKABLE:
+                        return False
+                    elif error + errorPrev > ddx and grid[y * width + x - xStep] != WALKABLE:
+                        return False
+                    elif grid[(y - yStep) * width + x] != WALKABLE or grid[y * width + x - xStep] != WALKABLE:
+                        return False
                 if grid[y * width + x] != WALKABLE:
                     return False
                 errorPrev = error
@@ -151,16 +146,11 @@ class Pathfinder(object):
                 if error > ddy:
                     x += xStep
                     error -= ddy
-                    if error + errorPrev < ddy:
-                        if grid[y * width + x - xStep] != WALKABLE:
-                            return False
-                    elif error + errorPrev > ddy:
-                        if grid[(y - yStep) * width + x] != WALKABLE:
-                            return False
-                    else:
-                        if grid[y * width + x - xStep] != WALKABLE:
-                            return False
-                        if grid[(y - yStep) * width + x] != WALKABLE:
+                    if error + errorPrev < ddy and grid[y * width + x - xStep] != WALKABLE:
+                        return False
+                    elif error + errorPrev > ddy and grid[(y - yStep) * width + x] != WALKABLE:
+                        return False
+                    elif grid[y * width + x - xStep] != WALKABLE or grid[(y - yStep) * width + x] != WALKABLE:
                             return False
                 if grid[y * width + x] != WALKABLE:
                     return False
@@ -173,23 +163,14 @@ class Pathfinder(object):
         if ((link['data']['type'] == 'leave') or (link['data']['type'] == 'transport')):
             if link['data']['map'] == 'bank':
                 return 1000
-            if costs.get('transport'):
-                return costs['transport']
-            else:
-                return Pathfinder.TRANSPORT_COST
+            return costs.get('transport', Pathfinder.TRANSPORT_COST)
         elif link['data']['type'] == 'enter':
-            if costs.get('enter'):
-                return costs['enter']
-            else:
-                return Pathfinder.ENTER_COST
+            return costs.get('enter', Pathfinder.ENTER_COST)
         elif link['data']['type'] == 'town':
             if avoidTownWarps:
                 return sys.maxsize
             else:
-                if costs.get('town'):
-                     return costs['town']
-                else:
-                    return Pathfinder.TOWN_COST
+                return costs.get('town', Pathfinder.TOWN_COST)
         
         if fr['map'] == to['map']:
             return Tools.distance(fr, to)
@@ -217,62 +198,58 @@ class Pathfinder(object):
         if Pathfinder.G == None:
             raise Exception("Prepare pathfinding before querying getGrid()!")
 
-        gMap = Pathfinder.G['maps'][map]
-        gGeo = Pathfinder.G['geometry'][map]
-        minX = gGeo['min_x']
-        maxX = gGeo['max_x']
-        minY = gGeo['min_y']
-        maxY = gGeo['max_y']
-        width = maxX - minX
-        height = maxY - minY
+        minX = Pathfinder.G['geometry'][map]['min_x']
+        minY = Pathfinder.G['geometry'][map]['min_y']
+        width = Pathfinder.G['geometry'][map]['max_x'] - minX
+        height = Pathfinder.G['geometry'][map]['max_y'] - minY
 
         # gridStart = datetime.utcnow().timestamp()
         # print("  Starting grid creation...")
         grid = [UNKNOWN] * (height * width)
-        for yLine in gGeo['y_lines']:
-            lowerY = max([0, yLine[0] - minY - base['vn']])
-            upperY = min([yLine[0] - minY + base['v'] + 1, height])
+        for yLine in Pathfinder.G['geometry'][map]['y_lines']:
+            lowerY = max(0, yLine[0] - minY - base['vn'])
+            upperY = min(yLine[0] - minY + base['v'] + 1, height)
+            lowerX = max(0, yLine[1] - minX - base['h'])
+            upperX = min(yLine[2] - minX + base['h'] + 1, width)
             for y in range(lowerY, upperY):
-                lowerX = max([0, yLine[1] - minX - base['h']])
-                upperX = min([yLine[2] - minX + base['h'] + 1, width])
                 for x in range(lowerX, upperX):
                     grid[y * width + x] = UNWALKABLE
         
-        for xLine in gGeo['x_lines']:
-            lowerX = max([0, xLine[0] - minX - base['h']])
-            upperX = min([xLine[0] - minX + base['h'] + 1, width])
+        for xLine in Pathfinder.G['geometry'][map]['x_lines']:
+            lowerX = max(0, xLine[0] - minX - base['h'])
+            upperX = min(xLine[0] - minX + base['h'] + 1, width)
+            lowerY = max(0, xLine[1] - minY - base['vn'])
+            upperY = min(xLine[2] - minY + base['v'] + 1, height)
             for x in range(lowerX, upperX):
-                lowerY = max([0, xLine[1] - minY - base['vn']])
-                upperY = min([xLine[2] - minY + base['v'] + 1, height])
                 for y in range(lowerY, upperY):
                     grid[y * width + x] = UNWALKABLE
         
-        for spawn in gMap['spawns']:
+        for spawn in Pathfinder.G['maps'][map]['spawns']:
             x = math.trunc(spawn[0]) - minX
             y = math.trunc(spawn[1]) - minY
             if grid[y * width + x] != WALKABLE:
                 stack = [[y,x]]
                 while len(stack) > 0:
-                    [y,x] = stack.pop()
-                    while x >= 0 and grid[y * width + x] == UNKNOWN:
-                        x -= 1
-                    x += 1
+                    ny, nx = stack.pop()
+                    while nx >= 0 and grid[ny * width + nx] == UNKNOWN:
+                        nx -= 1
+                    nx += 1
                     spanAbove = 0
                     spanBelow = 0
-                    while x < width and grid[y * width + x] == UNKNOWN:
-                        grid[y * width + x] = WALKABLE
-                        if not spanAbove and y > 0 and grid[(y - 1) * width + x] == UNKNOWN:
-                            stack.append([y - 1, x])
+                    while nx < width and grid[ny * width + nx] == UNKNOWN:
+                        grid[ny * width + nx] = WALKABLE
+                        if not spanAbove and ny > 0 and grid[(ny - 1) * width + nx] == UNKNOWN:
+                            stack.append([ny - 1, nx])
                             spanAbove = 1
-                        elif spanAbove and y > 0 and grid[(y - 1) * width + x] != UNKNOWN:
+                        elif spanAbove and ny > 0 and grid[(ny - 1) * width + nx] != UNKNOWN:
                             spanAbove = 0
                         
-                        if not spanBelow and y < (height - 1) and grid[(y + 1) * width + x] == UNKNOWN:
-                            stack.append([y + 1, x])
+                        if not spanBelow and ny < (height - 1) and grid[(ny + 1) * width + nx] == UNKNOWN:
+                            stack.append([ny + 1, nx])
                             spanBelow = 1
-                        elif spanBelow and y < (height - 1) and grid[(y + 1) * width + x] != UNKNOWN:
+                        elif spanBelow and ny < (height - 1) and grid[(ny + 1) * width + nx] != UNKNOWN:
                             spanBelow = 0
-                        x += 1
+                        nx += 1
         # print(f"  grid size: {len(grid)}")
         # print(f"  grid completion: {(datetime.utcnow().timestamp() - gridStart)}\n")
         Pathfinder.grids[map] = grid
@@ -280,14 +257,10 @@ class Pathfinder(object):
 
     @staticmethod
     def createVertexData(map: str, grid: list[int], vertexNames: list[str], vertexAttrs: dict[str, str | int]):
-        gMap = Pathfinder.G['maps'][map]
-        gGeo = Pathfinder.G['geometry'][map]
-        minX = gGeo['min_x']
-        maxX = gGeo['max_x']
-        minY = gGeo['min_y']
-        maxY = gGeo['max_y']
-        width = maxX - minX
-        height = maxY - minY
+        minX = Pathfinder.G['geometry'][map]['min_x']
+        minY = Pathfinder.G['geometry'][map]['min_y']
+        width = Pathfinder.G['geometry'][map]['max_x'] - minX
+        height = Pathfinder.G['geometry'][map]['max_y'] - minY
 
         points = set()         # list of points for delaunay
         
@@ -295,36 +268,32 @@ class Pathfinder(object):
         for y in range(1, height - 1):
             for x in range(1, width):
                 # for each walkable x/y position...
-                middleCenter = grid[y * width + x]
-                if middleCenter != WALKABLE:
+                if grid[y * width + x] != WALKABLE:
                     continue
                 
                 # get surrounding positions
-                bottomLeft = grid[(y - 1) * width + x - 1]
-                bottomCenter = grid[(y - 1) * width + x]
-                bottomRight = grid[(y - 1) * width + x + 1]
-                middleLeft = grid[y * width + x - 1]
-                middleRight = grid[y * width + x + 1]
-                upperLeft = grid[(y + 1) * width + x - 1]
-                upperCenter = grid[(y + 1) * width + x]
-                upperRight = grid[(y + 1) * width + x + 1]
-
-                mapX = x + minX
-                mapY = y + minY
+                bL = grid[(y - 1) * width + x - 1]
+                bC = grid[(y - 1) * width + x]
+                bR = grid[(y - 1) * width + x + 1]
+                mL = grid[y * width + x - 1]
+                mR = grid[y * width + x + 1]
+                uL = grid[(y + 1) * width + x - 1]
+                uC = grid[(y + 1) * width + x]
+                uR = grid[(y + 1) * width + x + 1]
 
                 # check corner locations for walkability
-                if (((WALKABLE not in [upperLeft, middleLeft, bottomLeft, bottomCenter, bottomRight]))      # inside-1
-                    or ((WALKABLE not in [upperRight, middleRight, bottomLeft, bottomCenter, bottomRight])) # inside-2
-                    or ((WALKABLE not in [upperLeft, upperCenter, upperRight, middleRight, bottomRight]))   # inside-3
-                    or ((WALKABLE not in [upperLeft, upperCenter, upperRight, middleLeft, bottomLeft]))     # inside-4
-                    or ((bottomLeft == UNWALKABLE) and (UNWALKABLE not in [middleLeft, bottomCenter]))      # outside-1
-                    or ((bottomRight == UNWALKABLE) and (UNWALKABLE not in [middleRight, bottomCenter]))    # outside-2
-                    or ((upperRight == UNWALKABLE) and (UNWALKABLE not in [upperCenter, middleRight]))      # outside-3
-                    or ((upperLeft == UNWALKABLE) and (UNWALKABLE not in [upperCenter, middleLeft]))):      # outside-4
-                    points.add((mapX, mapY))
+                if (((WALKABLE not in [uL, mL, bL, bC, bR]))                # inside-1
+                 or ((WALKABLE not in [uR, mR, bL, bC, bR]))                # inside-2
+                 or ((WALKABLE not in [uL, uC, uR, mR, bR]))                # inside-3
+                 or ((WALKABLE not in [uL, uC, uR, mL, bL]))                # inside-4
+                 or ((bL == UNWALKABLE) and (UNWALKABLE not in [mL, bC]))   # outside-1
+                 or ((bR == UNWALKABLE) and (UNWALKABLE not in [mR, bC]))   # outside-2
+                 or ((uR == UNWALKABLE) and (UNWALKABLE not in [uC, mR]))   # outside-3
+                 or ((uL == UNWALKABLE) and (UNWALKABLE not in [uC, mL]))): # outside-4
+                    points.add((x + minX, y + minY))
         
         # add nodes at transporters (we'll look for close nodes to transporters later)
-        transporters = [npc for npc in gMap['npcs'] if npc['id'] == 'transporter']
+        transporters = [npc for npc in Pathfinder.G['maps'][map]['npcs'] if npc['id'] == 'transporter']
         if len(transporters) > 0:
             pos = transporters[0]['position']
             closest = Pathfinder.findClosestSpawn(map, pos[0], pos[1])
@@ -340,10 +309,10 @@ class Pathfinder(object):
                 angle += math.pi / 32
         
         # add nodes at doors (we'll look for close nodes to doors later)
-        doors = [door for door in gMap['doors'] if len(door) <= 7 or door[7] != 'complicated']
+        doors = [door for door in Pathfinder.G['maps'][map]['doors'] if len(door) <= 7 or door[7] != 'complicated']
         for door in doors:
             # From
-            spawn = gMap['spawns'][door[6]]
+            spawn = Pathfinder.G['maps'][map]['spawns'][door[6]]
             points.add((spawn[0], spawn[1]))
 
             # make more points around the door
@@ -367,7 +336,7 @@ class Pathfinder(object):
                     angle += math.pi / 32
          
         # Add nodes at spawns
-        for spawn in gMap['spawns']:
+        for spawn in Pathfinder.G['maps'][map]['spawns']:
             points.add((spawn[0], spawn[1]))
         
         vertexNames += [f"{map}:{x},{y}" for (x, y) in points]
@@ -389,9 +358,8 @@ class Pathfinder(object):
             
             for fromNode in walkableNodes:
                 # add destination nodes and links to maps that are reachable through the door(s)
+                doors = [door for door in doors if Pathfinder.doorDistance(fromNode, door) < Constants.DOOR_REACH_DISTANCE]
                 for door in doors:
-                    if Pathfinder.doorDistance(fromNode, door) >= Constants.DOOR_REACH_DISTANCE:
-                        continue # door is too far away
                     # To:
                     spawn2 = Pathfinder.G['maps'][door[4]]['spawns'][door[5]]
                     toDoor = Pathfinder.addNodeToGraph(door[4], spawn2[0], spawn2[1])
@@ -616,12 +584,10 @@ class Pathfinder(object):
                 if error > ddx:
                     y += yStep
                     error -= ddx
-                    if error + errorPrev < ddx:
-                        if grid[(y - yStep) * width + x] != WALKABLE:
-                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
-                    elif error + errorPrev > ddx:
-                        if grid[y * width + x - xStep] != WALKABLE:
-                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                    if error + errorPrev < ddx and grid[(y - yStep) * width + x] != WALKABLE:
+                        return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                    elif error + errorPrev > ddx and grid[y * width + x - xStep] != WALKABLE:
+                        return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                     else:
                         if grid[(y - yStep) * width + x] != WALKABLE:
                             return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
@@ -638,12 +604,10 @@ class Pathfinder(object):
                 if error > ddy:
                     x += xStep
                     error -= ddy
-                    if error + errorPrev < ddy:
-                        if grid[y * width + x - xStep] != WALKABLE:
-                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
-                    elif error + errorPrev > ddy:
-                        if grid[(y - yStep) * width + x] != WALKABLE:
-                            return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                    if error + errorPrev < ddy and grid[y * width + x - xStep] != WALKABLE:
+                        return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
+                    elif error + errorPrev > ddy and grid[(y - yStep) * width + x] != WALKABLE:
+                        return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
                     else:
                         if grid[y * width + x - xStep] != WALKABLE:
                             return { 'map': frMap, 'x': x - xStep + gGeo['min_x'], 'y': y - yStep + gGeo['min_y'] }
@@ -669,31 +633,20 @@ class Pathfinder(object):
         handler.setFormatter(logging.Formatter(fmt='%(levelname)s - %(name)s - %(asctime)s - %(funcName)s: %(message)s', datefmt='%H:%M:%S'))
         Pathfinder.logger.addHandler(handler)
 
-        maps = [Constants.PATHFINDER_FIRST_MAP]
-
         start = datetime.utcnow().timestamp()
-        Pathfinder.logger.debug("Preparing Pathfinder...")
 
-        i = 0
-        while i < len(maps):
-            map = maps[i]
+        NOTMAPS = ['d_b1', 'd2', 'batcave', 'resort', 'd_a2', 'dungeon0', 'cgallery', 'd_a1', 'ship0', 'd_g', 'abtesting', 'old_bank', 'old_main', 'original_main', 'duelland', 'test', 'bank_u', 'shellsisland', 'goobrawl', 'bank_b']
 
-            for door in Pathfinder.G['maps'][map]['doors']:
-                if door[4] not in maps:
-                    maps.append(door[4])
-            
-            i += 1
-        
-        for map in Pathfinder.G['npcs']['transporter']['places']:
-            if map not in maps:
-                maps.append(map)
+        # add every 'key' in G.maps if it's not in NOTMAPS
+        maps = [key for key in Pathfinder.G['maps'] if key not in NOTMAPS]
 
-        if 'bank_b' in maps and not include_bank_b:
-            maps.remove('bank_b')
-        if 'bank_u' in maps and not include_bank_u:
-            maps.remove('bank_u')
-        if 'test' in maps and not include_test:
-            maps.remove('test')
+        # add various maps if they are included via arguments
+        if include_bank_b:
+            maps.append('bank_b')
+        if include_bank_u:
+            maps.append('bank_u')
+        if include_test:
+            maps.append('test')
         
         maps.append('jail')
 
