@@ -71,9 +71,12 @@ function getNode(graph::Graph, name::String)
 end
 
 function addNode!(graph::Graph, map::String, x::Int64, y::Int64)
-    try
+    name = "$map:$x,$y"
+    if haskey(graph.nodes, name)
         return getNode(graph, name)
-    catch
-        name::String = map * ":" * x * "," * y
-
+    else
+        node = Node(name, map, x, y)
+        graph.nodes[name] = node
+        return node
     end
+end
