@@ -673,42 +673,40 @@ class Pathfinder(object):
         
         maps.append('jail')
 
-        # gridStart = datetime.utcnow().timestamp()
+        for map in maps:
+            Pathfinder.createGrid(map)
+
+        vertexNames = []
+        vertexAttrs = { 'map': [], 'x': [], 'y': [] }
         # for map in maps:
-        #     Pathfinder.createGrid(map)
-        # print("grid time:", datetime.utcnow().timestamp() - gridStart)
-
-        # vertexNames = []
-        # vertexAttrs = { 'map': [], 'x': [], 'y': [] }
-        # # for map in maps:
-        # #     Pathfinder.createVertexData(map, Pathfinder.getGrid(map, base), vertexNames, vertexAttrs)
-        # with multiprocessing.Manager() as m:
-        #     ml = m.list(vertexNames)
-        #     md = m.dict(vertexAttrs)
-        #     with multiprocessing.Pool(processes=4, initializer=Pathfinder.init, initargs=(g,)) as p:
-        #         results = [p.apply_async(Pathfinder.createVertexData, args=(map, Pathfinder.createGrid(map, base), ml, md)) for map in maps]
-        #         for r in results:
-        #             r.wait()
-        #     vertexNames = deepcopy(ml)
-        #     vertexAttrs = deepcopy(md)
+        #     Pathfinder.createVertexData(map, Pathfinder.getGrid(map, base), vertexNames, vertexAttrs)
+        with multiprocessing.Manager() as m:
+            ml = m.list(vertexNames)
+            md = m.dict(vertexAttrs)
+            with multiprocessing.Pool(processes=4, initializer=Pathfinder.init, initargs=(g,)) as p:
+                results = [p.apply_async(Pathfinder.createVertexData, args=(map, Pathfinder.createGrid(map, base), ml, md)) for map in maps]
+                for r in results:
+                    r.wait()
+            vertexNames = deepcopy(ml)
+            vertexAttrs = deepcopy(md)
         
-        # Pathfinder.graph.add_vertices(vertexNames, vertexAttrs)
+        Pathfinder.graph.add_vertices(vertexNames, vertexAttrs)
 
-        # links, linkAttr = Pathfinder.createLinkData(maps)
-        # Pathfinder.graph.add_edges(links, linkAttr)
+        links, linkAttr = Pathfinder.createLinkData(maps)
+        Pathfinder.graph.add_edges(links, linkAttr)
         
-        # if cheat:
-        #     if 'winterland' in maps:
-        #         fr = Pathfinder.findClosestNode('winterland', 721, 277)
-        #         to = Pathfinder.findClosestNode('winterland', 737, 352)
-        #         if fr != None and to != None and fr != to:
-        #             Pathfinder.addLinkToGraph(fr, to)
-        #         else:
-        #             print('The winterland map has changed, cheat to walk to icegolem is not enabled.')
+        if cheat:
+            if 'winterland' in maps:
+                fr = Pathfinder.findClosestNode('winterland', 721, 277)
+                to = Pathfinder.findClosestNode('winterland', 737, 352)
+                if fr != None and to != None and fr != to:
+                    Pathfinder.addLinkToGraph(fr, to)
+                else:
+                    print('The winterland map has changed, cheat to walk to icegolem is not enabled.')
 
-        # Pathfinder.logger.debug(f"Pathfinding prepared! ({(datetime.utcnow().timestamp() - start)}s)")
-        # Pathfinder.logger.debug(f"  # Nodes: {len(Pathfinder.graph.vs)}")
-        # Pathfinder.logger.debug(f"  # Links: {len(Pathfinder.graph.es)}")
+        Pathfinder.logger.debug(f"Pathfinding prepared! ({(datetime.utcnow().timestamp() - start)}s)")
+        Pathfinder.logger.debug(f"  # Nodes: {len(Pathfinder.graph.vs)}")
+        Pathfinder.logger.debug(f"  # Links: {len(Pathfinder.graph.es)}")
     
     @staticmethod
     def arange(start = 0, stop = 2 * math.pi, step = math.pi):

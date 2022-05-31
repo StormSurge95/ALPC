@@ -369,3 +369,4 @@ MigrationBackup/
 FodyWeavers.xsd
 source/Test.py
 source/Bots/*
+source/Test.jl
