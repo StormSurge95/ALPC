@@ -241,10 +241,9 @@ class Pathfinder(object):
         height = Pathfinder.G['geometry'][map]['max_y'] - minY
 
         points = set()         # list of points for delaunay
-        print("\n")
-        Pathfinder.logger.debug(f"{map}:")
         
         starttime = datetime.utcnow().timestamp()
+        walkableIndices = []
         # add nodes at corners
         for y in range(1, height - 1):
             for x in range(1, width):
@@ -272,8 +271,6 @@ class Pathfinder(object):
                  or ((uR == UNWALKABLE) and (UNWALKABLE not in [uC, mR]))   # outside-3
                  or ((uL == UNWALKABLE) and (UNWALKABLE not in [uC, mL]))): # outside-4
                     points.add((x + minX, y + minY))
-        Pathfinder.logger.debug(f"    Corners: {datetime.utcnow().timestamp() - starttime}")
-        starttime = datetime.utcnow().timestamp()
         
         # add nodes at transporters (we'll look for close nodes to transporters later)
         transporters = [npc for npc in Pathfinder.G['maps'][map]['npcs'] if npc['id'] == 'transporter']
@@ -288,8 +285,6 @@ class Pathfinder(object):
                 y = math.trunc(pos[1] + math.sin(angle) * (Constants.TRANSPORTER_REACH_DISTANCE - 10))
                 if Pathfinder.canStand({'map': map, 'x': x, 'y': y}):
                     points.add((x, y))
-        Pathfinder.logger.debug(f"    Transporters: {datetime.utcnow().timestamp() - starttime}")
-        starttime = datetime.utcnow().timestamp()
         
         # add nodes at doors (we'll look for close nodes to doors later)
         doors = [door for door in Pathfinder.G['maps'][map]['doors'] if len(door) <= 7 or door[7] != 'complicated']
@@ -315,13 +310,10 @@ class Pathfinder(object):
                     y = math.trunc(point['y'] + math.sin(angle) * (Constants.DOOR_REACH_DISTANCE - 10))
                     if Pathfinder.canStand({ 'map': map, 'x': x, 'y': y }):
                         points.add((x, y))
-        Pathfinder.logger.debug(f"    Doors: {datetime.utcnow().timestamp() - starttime}")
-        starttime = datetime.utcnow().timestamp()
-         
+        
         # Add nodes at spawns
         for spawn in Pathfinder.G['maps'][map]['spawns']:
             points.add((spawn[0], spawn[1]))
-        Pathfinder.logger.debug(f"    Spawns: {datetime.utcnow().timestamp() - starttime}")
         
         vertexNames += [f"{map}:{x},{y}" for (x, y) in points]
         vertexAttrs['map'] += [map] * len(points)
@@ -636,6 +628,8 @@ class Pathfinder(object):
 
         for map in maps:
             Pathfinder.createVertexData(map, Pathfinder.getGrid(map), vertexNames, vertexAttrs)
+        Pathfinder.logger.debug(f"Vertex Data Creation: {datetime.utcnow().timestamp() - start2}")
+        start2 = datetime.utcnow().timestamp()
 
         # with multiprocessing.Manager() as m:
         #     ml = m.list(vertexNames)
@@ -653,6 +647,9 @@ class Pathfinder(object):
         start2 = datetime.utcnow().timestamp()
 
         links, linkAttr = Pathfinder.createLinkData(maps)
+        Pathfinder.logger.debug(f"Link Data Creation: {datetime.utcnow().timestamp() - start2}")
+        start2 = datetime.utcnow().timestamp()
+
         Pathfinder.graph.add_edges(links, linkAttr)
 
         Pathfinder.logger.debug(f"Edge creation: {datetime.utcnow().timestamp() - start2}")
@@ -668,6 +665,3 @@ class Pathfinder(object):
         Pathfinder.logger.debug(f"Pathfinding prepared! ({(datetime.utcnow().timestamp() - start)}s)")
         Pathfinder.logger.debug(f"  # Nodes: {len(Pathfinder.graph.vs)}")
         Pathfinder.logger.debug(f"  # Links: {len(Pathfinder.graph.es)}")
-
-        for map in maps:
-            Pathfinder.logger.debug(f"{map}: {len(Pathfinder.getGrid(map))}")
