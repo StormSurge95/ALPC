@@ -1,5 +1,10 @@
 module Graphs
 
+"""
+    Graph package based on ngraph.graph by anvaka
+    and modified heavily for use with ALPC.
+"""
+
 struct LinkTypes
     walk::Bool
     town::Bool
@@ -38,6 +43,10 @@ mutable struct GraphNode
     x::Int64
     y::Int64
     links::Union{Vector{GraphLink}, Nothing}
+    opened::Bool
+    closed::Bool
+    fScore::Float64
+    gScore::Float64
 
     function GraphNode(name::String, map::String, x::Int64, y::Int64, links::Union{Vector{GraphLink}, Nothing}=nothing)
         return new(name, map, x, y, links)
@@ -236,6 +245,17 @@ function removeNode!(graph::Graph, node::GraphNode)
     delete!(graph.nodes, node.name)
 
     return nothing
+end
+
+function resetPathVars(node::GraphNode)
+    node.opened = false
+    node.closed = false
+    node.fScore = 0
+    node.gScore = 0
+end
+
+function resetPathVars(graph::Graph)
+    forEachNode(graph, n -> resetPathVars(n))
 end
 
 end

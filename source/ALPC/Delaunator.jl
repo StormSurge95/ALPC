@@ -41,6 +41,12 @@ mutable struct Delaunay
         triangles::Vector{Int64} = constructor(d, coords)
         return d
     end
+
+    function Delaunay(points::Matrix)
+        vPoints::Vertex{Vertex{Int64}} = [c[:] for c in eachrow(points)]
+
+        return Delaunay(vPoints)
+    end
 end
 
 function constructor(d::Delaunay, coords)

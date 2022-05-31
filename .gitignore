@@ -367,6 +367,5 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-source/Test.py
 source/Bots/*
-source/Test.jl
+source/Test*.jl
