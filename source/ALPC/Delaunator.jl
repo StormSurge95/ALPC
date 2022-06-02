@@ -42,8 +42,8 @@ mutable struct Delaunay
         return d
     end
 
-    function Delaunay(points::Matrix)
-        vPoints::Vertex{Vertex{Int64}} = [c[:] for c in eachrow(points)]
+    function Delaunay(points::Matrix{Int64})
+        vPoints::Vector{Vector{Int64}} = [c[:] for c in eachrow(points)]
 
         return Delaunay(vPoints)
     end
