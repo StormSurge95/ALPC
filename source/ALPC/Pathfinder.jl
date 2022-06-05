@@ -11,8 +11,8 @@ module Pathfinder
     pushfirst!(PyVector(pyimport("sys")."path"), "./source/ALPC/")
     Constants = pyimport("Constants").Constants
     Tools = pyimport("Tools").Tools
-    include("./Delaunator.jl")
-    include("./Graphs.jl")
+    include("./graphing/Delaunator.jl")
+    include("./graphing/Graphs.jl")
 
     try
         using MetaGraphs
