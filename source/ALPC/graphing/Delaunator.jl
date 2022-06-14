@@ -50,33 +50,33 @@ mutable struct Delaunay
 end
 
 function constructor(d::Delaunay, coords)
-    n::Int64 = length(coords) >> 1
+    n::Int64 = (length(coords) - 1) >> 1
 
     d.coords = coords
 
     # arrays that will store the triangulation graph
-    maxTriangles::Int64 = max(2 * n - 5, 0)
-    d._triangles = Vector(undef, maxTriangles * 3)
-    d._halfedges = Vector(undef, maxTriangles * 3)
+    maxTriangles::Int64 = max(2 * n - 5, 0) * 3
+    d._triangles = Vector{Int64}(undef, maxTriangles)
+    d._halfedges = Vector{Int64}(undef, maxTriangles)
 
     # temporary arrays for tracking the edges of the advancing convex hull
     d.hashSize = ceil(sqrt(n))
-    d.hullPrev = Vector(undef, n) # edge to prev edge
-    d.hullNext = Vector(undef, n) # edge to next edge
-    d.hullTri = Vector(undef, n) # edge to adjacent triangle
-    d.hullHash = Vector(undef, d.hashSize) # angular edge hash
+    d.hullPrev = Vector{Int64}(undef, n) # edge to prev edge
+    d.hullNext = Vector{Int64}(undef, n) # edge to next edge
+    d.hullTri = Vector{Int64}(undef, n) # edge to adjacent triangle
+    d.hullHash = Vector{Int64}(undef, d.hashSize) # angular edge hash
     fill!(d.hullHash, -1)
 
     # temporary arrays for sorting points
-    d._ids = Vector(undef, n)
-    d._dists = Vector(undef, n)
+    d._ids = Vector{Int64}(undef, n)
+    d._dists = Vector{Int64}(undef, n)
     triangles::Vector{Int64} = update(d, coords)
 
     return triangles
 end
 
 function update(d::Delaunay, coords)
-    n::Int64 = length(coords) >> 1
+    n::Int64 = (length(coords) - 1) >> 1
 
     # populate an array of point indices; calculate input data bbox
     minX::Int64 = typemax(Int64)
@@ -85,8 +85,8 @@ function update(d::Delaunay, coords)
     maxY::Int64 = typemin(Int64)
 
     for i in 1:n
-        x::Int64 = coords[2 * i - 1]
-        y::Int64 = coords[2 * i]
+        x::Int64 = coords[2 * i]
+        y::Int64 = coords[2 * i + 1]
         if (x < minX)
             minX = x
         end
@@ -102,8 +102,8 @@ function update(d::Delaunay, coords)
         d._ids[i] = i
     end
 
-    cx::Int64 = trunc((minX + maxX) / 2)
-    cy::Int64 = trunc((minY + maxY) / 2)
+    cx::Int64 = trunc(Int64, (minX + maxX) / 2)
+    cy::Int64 = trunc(Int64, (minY + maxY) / 2)
 
     minDist::Int64 = typemax(Int64)
     i0::Int64 = 1
@@ -112,7 +112,7 @@ function update(d::Delaunay, coords)
 
     # pick a seed point close to the center_pt
     for i in 1:n
-        di::Int64 = dist(cx, cy, coords[2 * i - 1], coords[2 * i])
+        di::Int64 = dist(cx, cy, coords[2 * i], coords[2 * i + 1])
 
         if (di < minDist)
             i0 = i
@@ -129,7 +129,7 @@ function update(d::Delaunay, coords)
         if (i == i0)
             continue
         end
-        di::Int64 = dist(i0x, i0y, coords[2 * i - 1], coords[2 * i])
+        di::Int64 = dist(i0x, i0y, coords[2 * i], coords[2 * i + 1])
 
         if (di < minDist && di > 0)
             i1 = i
@@ -147,7 +147,7 @@ function update(d::Delaunay, coords)
         if (i == i0 || i == i1)
             continue
         end
-        r::Int64 = circumradius(i0x, i0y, i1x, i1y, coords[2 * i - 1], coords[2 * i])
+        r::Int64 = circumradius(i0x, i0y, i1x, i1y, coords[2 * i], coords[2 * i + 1])
 
         if (r < minRadius)
             i2 = i
@@ -162,7 +162,7 @@ function update(d::Delaunay, coords)
         # order collinear points by dx (or dy if all x are identical)
         # and return the list as a hull
         for i in 1:n
-            d._dists[i] = (coords[2 * i - 1] - coords[1]) || (coords[2 * i] - coords[2])
+            d._dists[i] = (coords[2 * i] - coords[1]) || (coords[2 * i + 1] - coords[2])
         end
 
         quicksort(d._ids, d._dists, 1, n)
@@ -203,7 +203,7 @@ function update(d::Delaunay, coords)
     d._cy = center[2]
 
     for i in 1:n
-        d._dists[i] = dist(coords[2 * i - 1], coords[2 * i], center[1], center[2])
+        d._dists[i] = dist(coords[2 * i], coords[2 * i + 1], center[1], center[2])
     end
 
     # sort the points by distance from the seed triangle circumcenter
@@ -233,8 +233,8 @@ function update(d::Delaunay, coords)
 
     for k in 1:length(d._ids)
         i = d._ids[k]
-        x = coords[2 * i - 1]
-        y = coords[2 * i]
+        x = coords[2 * i]
+        y = coords[2 * i + 1]
 
         # skip near-duplicate points
         if (k > 0 && abs(x - xp) <= EPSILON && abs(y - yp) <= EPSILON)
@@ -520,14 +520,17 @@ function circumradius(ax::Int64, ay::Int64, bx::Int64, by::Int64, cx::Int64, cy:
 
     bl::Int64 = dx * dx + dy * dy
     cl::Int64 = ex * ex + ey * ey
-    d = 0
-    try
-        d = 0.5 / (dx * ey - dy * ex)
-    catch
-        d = Inf
+    d::Float64 = 0.5 / (dx * ey - dy * ex)
+    xVal::Float64 = ((ey * bl - dy * cl) * d)
+    yVal::Float64 = ((dx * cl - ex * bl) * d)
+    if isnan(xVal) || isinf(xVal)
+        xVal = 999999
     end
-    x::Int64 = trunc((ey * bl - dy * cl) * d)
-    y::Int64 = trunc((dx * cl - ex * bl) * d)
+    if isnan(yVal) || isinf(yVal)
+        yVal = 999999
+    end
+    x::Int64 = trunc(Int64, xVal)
+    y::Int64 = trunc(Int64, yVal)
     return x*x + y*y
 end
 
@@ -539,16 +542,17 @@ function circumcenter(ax::Int64, ay::Int64, bx::Int64, by::Int64, cx::Int64, cy:
 
     bl::Int64 = dx * dx + dy * dy
     cl::Int64 = ex * ex + ey * ey
-    d = 0.0
-    try
-        d = 0.5 / (dx * ey - dy * ex)
-    catch
-        d = Inf
+    d::Float64 = 0.5 / (dx * ey - dy * ex)
+    xVal::Float64 = (ax + (ey * bl - dy * cl) * d)
+    yVal::Float64 = (ay + (dx * cl - ex * bl) * d)
+    if isnan(xVal) || isinf(xVal)
+        xVal = 999999
     end
-
-    x::Int64 = trunc(ax + (ey * bl - dy * cl) * d)
-    y::Int64 = trunc(ay + (dx * cl - ex * bl) * d)
-
+    if isnan(yVal) || isinf(yVal)
+        yVal = 999999
+    end
+    x::Int64 = trunc(Int64, xVal)
+    y::Int64 = trunc(Int64, yVal)
     return x, y
 end
 

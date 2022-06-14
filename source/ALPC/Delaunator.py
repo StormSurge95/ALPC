@@ -264,7 +264,6 @@ class Delaunator:
 
     def _hashKey(self,x, y):
         ret = math.floor(pseudoAngle(x - self._cx, y - self._cy) * self.hashSize) % self.hashSize
-        print(ret)
         return ret
 
     def _legalize(self,a,coords):

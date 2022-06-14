@@ -15,10 +15,15 @@ class Constants:
 
     ## Various distance related things ##
     MAX_VISIBLE_RANGE: int = 800
+    MAX_VISIBLE_RANGE_2: int = 640000
     NPC_INTERACTION_DISTANCE: int = 400
+    NPC_INTERACTION_DISTANCE_2: int = 160000
     DASH_DISTANCE: int = 40
+    DASH_DISTANCE_2: int = 1600
     DOOR_REACH_DISTANCE: int = 39
+    DOOR_REACH_DISTANCE_2: int = 1521
     TRANSPORTER_REACH_DISTANCE: int = 159
+    TRANSPORTER_REACH_DISTANCE_2: int = 25281
     BASE: dict = {
         'h': 8,
         'v': 7,

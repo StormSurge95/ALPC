@@ -7,15 +7,16 @@ module Graphs
         town::Bool
         transport::Bool
         enter::Bool
+        leave::Bool
 
-        function LinkTypes(walk, town, transport, enter)
-            return new(walk, town, transport, enter)
+        function LinkTypes(walk::Bool, town::Bool, transport::Bool, enter::Bool, leave::Bool)
+            return new(walk, town, transport, enter, leave)
         end
     end
 
     "Constructor for LinkTypes objects"
-    function Types(walk, town, transport, enter)
-        return LinkTypes(walk, town, transport, enter)
+    function Types(walk::Bool, town::Bool, transport::Bool, enter::Bool, leave::Bool)
+        return LinkTypes(walk, town, transport, enter, leave)
     end
 
     "internal structure to represent links between graph nodes"
@@ -202,12 +203,26 @@ module Graphs
     *NOTE:* the `data` parameter ***must*** have values for "key", "map",\n
     "types" (in the form of the LinkTypes object), "x", "y", and "spawn"
     """
-    function addLink!(graph::Graph, source::String, dest::String, data::Dict{String})
+    function addLink!(graph::Graph, source::String, dest::String, data::Dict{String, Any})
         name::String = makeLinkID(source, dest)
         if haskey(graph.links, name)
-            return getLink(graph, name)
+            local link::GraphLink = getLink(graph, name)
+            if link.key != data["key"] && data["key"] !== nothing
+                link.key = data["key"]
+            end
+            if link.spawn != data["spawn"] && data["spawn"] !== nothing
+                link.spawn = data["spawn"]
+            end
+            if link.types != data["types"]
+                newT = data["types"]
+                link.types.walk = newT.walk ? newT.walk : link.types.walk
+                link.types.town = newT.town ? newT.town : link.types.town
+                link.types.transport = newT.transport ? newT.transport : link.types.transport
+                link.types.enter = newT.enter ? newT.enter : link.types.enter
+            end
+            return link
         else
-            link::GraphLink = Link(name, source, dest, data["key"], data["map"], data["types"], data["x"], data["y"], data["spawn"])
+            link = Link(name, source, dest, data["key"], data["map"], data["types"], data["x"], data["y"], data["spawn"])
             graph.links[name] = link
             sNode::GraphNode = addNode!(graph, source)
             dNode::GraphNode = addNode!(graph, dest)
@@ -215,6 +230,11 @@ module Graphs
             addLinkToNode!(dNode, link)
             return link
         end
+    end
+    function addLink!(graph::Graph, source::GraphNode, dest::GraphNode, data::Dict{String, Any})
+        sourceID::String = source.name
+        destID::String = dest.name
+        addLink!(graph, sourceID, destID, data)
     end
 
     "gets the count of nodes within the provided `graph` object"
@@ -533,8 +553,8 @@ module Graphs
         end
     end
 
-    function reconstructPath(searchState::NodeSearchState)
-        if searchState.p1 === nothing
+    function reconstructPath(searchState::Union{NodeSearchState, Nothing})
+        if searchState === nothing
             return []
         end
 
@@ -611,7 +631,6 @@ module Graphs
                 end
                 potentialMin = otherSearchState.g1 + otherSearchState.g2
                 if potentialMin < lMin
-                    println("setting minNode")
                     lMin = potentialMin
                     minNode = otherSearchState
                 end
@@ -684,15 +703,14 @@ module Graphs
 
         while (open2Set.length > 0 && open1Set.length > 0)
             if (open1Set.length < open2Set.length)
-                println("calling forwardSearch")
                 forwardSearch()
             else
-                println("calling reverseSearch")
                 reverseSearch()
             end
         end
 
         path = reconstructPath(minNode)
+        
         return path
     end
 

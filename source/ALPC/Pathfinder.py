@@ -651,7 +651,10 @@ class Pathfinder(object):
     async def prepare(g, *, base = Constants.BASE, cheat = False, include_bank_b = False, include_bank_u = False, include_test = False):
         Pathfinder.G = g
 
-        NOTMAPS = ['d_b1', 'd2', 'batcave', 'resort', 'd_a2', 'dungeon0', 'cgallery', 'd_a1', 'ship0', 'd_g', 'abtesting', 'old_bank', 'old_main', 'original_main', 'duelland', 'test', 'bank_u', 'shellsisland', 'goobrawl', 'bank_b']
+        NOTMAPS = [ 'd_b1', 'd2', 'batcave', 'resort', 'd_a2', 'dungeon0', 'cgallery',
+                    'd_a1', 'ship0', 'd_g', 'abtesting', 'old_bank', 'old_main',
+                    'original_main', 'duelland', 'test', 'bank_u', 'shellsisland',
+                    'goobrawl', 'bank_b' ]
 
         Pathfinder.logger = logging.getLogger('Pathfinder')
         handler = logging.StreamHandler()
@@ -670,25 +673,23 @@ class Pathfinder(object):
             maps.append('bank_u')
         if include_test:
             maps.append('test')
-        
-        maps.append('jail')
 
         for map in maps:
             Pathfinder.createGrid(map)
 
         vertexNames = []
         vertexAttrs = { 'map': [], 'x': [], 'y': [] }
-        # for map in maps:
-        #     Pathfinder.createVertexData(map, Pathfinder.getGrid(map, base), vertexNames, vertexAttrs)
-        with multiprocessing.Manager() as m:
-            ml = m.list(vertexNames)
-            md = m.dict(vertexAttrs)
-            with multiprocessing.Pool(processes=4, initializer=Pathfinder.init, initargs=(g,)) as p:
-                results = [p.apply_async(Pathfinder.createVertexData, args=(map, Pathfinder.createGrid(map, base), ml, md)) for map in maps]
-                for r in results:
-                    r.wait()
-            vertexNames = deepcopy(ml)
-            vertexAttrs = deepcopy(md)
+        for map in maps:
+            Pathfinder.createVertexData(map, Pathfinder.getGrid(map, base), vertexNames, vertexAttrs)
+        # with multiprocessing.Manager() as m:
+        #     ml = m.list(vertexNames)
+        #     md = m.dict(vertexAttrs)
+        #     with multiprocessing.Pool(processes=4, initializer=Pathfinder.init, initargs=(g,)) as p:
+        #         results = [p.apply_async(Pathfinder.createVertexData, args=(map, Pathfinder.createGrid(map, base), ml, md)) for map in maps]
+        #         for r in results:
+        #             r.wait()
+        #     vertexNames = deepcopy(ml)
+        #     vertexAttrs = deepcopy(md)
         
         Pathfinder.graph.add_vertices(vertexNames, vertexAttrs)
 

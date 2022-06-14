@@ -75,6 +75,7 @@ class Game(object):
                     if optimize:
                         Game.G = Game.optimizeG(Game.G)
                     logger.info("Updated 'G' data!")
+                    Game.G = Game.prepareGData(Game.G)
                     if cache:
                         file = open(gFile, mode='w')
                         file.write(ujson.dumps(Game.G))
@@ -84,28 +85,6 @@ class Game(object):
                     logger.error('Error fetching https://adventure.land/data.js')
                     logger.error(response)
                     raise Exception()
-    
-    async def getGString(session):
-        if not Game.version:
-            await Game.getVersion(session)
-        gFile = f'G_{Game.version}.json'
-        try:
-            file = open(gFile, mode='r', encodings='utf-8')
-            content = file.read()
-            ret = content
-            file.close()
-            return ret
-        except Exception as e:
-            async with session.get('http://adventure.land/data.js') as response:
-                if response.status == 200:
-                    data = await response.text()
-                    matches = re.match('var\s+G\s*=\s*(\{.+\});', data)
-                    ret = matches.group(1)
-                    return ret
-                else:
-                    logger.error('Error fetching https://adventure.land/data.js')
-                    logger.error(response)
-                    raise e
 
     @staticmethod
     async def getMail(session: aiohttp.ClientSession, all: bool = True):
@@ -309,8 +288,6 @@ class Game(object):
                 del gGeo['rectangles']
             if not 'x_lines' in gGeo or not 'y_lines' in gGeo:
                 continue
-            gGeo['x_lines'] = tuple(gGeo['x_lines'])
-            gGeo['y_lines'] = tuple(gGeo['y_lines'])
             newMinX = sys.maxsize
             newMinY = sys.maxsize
             newMaxX = sys.maxsize * -1
@@ -346,12 +323,6 @@ class Game(object):
             gGeo['max_x'] = newMaxX
             gGeo['max_y'] = newMaxY
             g['geometry'][mapName] = gGeo
-
-        for map in g['maps']:
-            gMap = g['maps'][map]
-            gMap['spawns'] = tuple(gMap['spawns'])
-            gMap['doors'] = tuple(gMap['doors'])
-            g['maps'][map] = gMap
 
         for monsterName in g['monsters']:
             gMonster = g['monsters'][monsterName]
@@ -465,5 +436,5 @@ class Game(object):
         if not Game.loggedIn:
             logger.error('You must login first.')
             return
-        
+
         jl.Pathfinder.prepare(Game.G)
